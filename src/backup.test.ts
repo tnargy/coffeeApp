@@ -53,6 +53,28 @@ function sampleState(): AppState {
   return state
 }
 
+function combinedState(): AppState {
+  const state = sampleState()
+  state.batches.push({ ...state.batches[0], id: 2, roastedWeightRemaining: 300 })
+  state.bags = [
+    { id: 1, batchId: 1, sources: [{ batchId: 1, weight: 200 }], bagSizeOz: 8, weight: 200, status: 'available', createdAt: '2026-06-03T00:00:00.000Z' },
+    {
+      id: 2,
+      batchId: 1,
+      sources: [
+        { batchId: 1, weight: 100 },
+        { batchId: 2, weight: 100 },
+      ],
+      bagSizeOz: 8,
+      weight: 200,
+      status: 'available',
+      createdAt: '2026-06-03T00:00:00.000Z',
+    },
+  ]
+  state.sales = []
+  return state
+}
+
 describe('backup', () => {
   it('builds a backup with a version, an export time, and every collection', () => {
     const state = sampleState()
@@ -140,6 +162,52 @@ describe('backup', () => {
     const exported = buildBackup(imported.state)
     expect(exported.batches[0]).not.toHaveProperty('restStartTime')
     expect(exported.batches[0].status).toBe('ready-to-bag')
+  })
+
+  it('reads a version 1 file with no bag sources', () => {
+    const v1 = { ...buildBackup(sampleState()), formatVersion: 1 }
+    const result = parseBackup(JSON.stringify(v1))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.bags[0].sources).toBeUndefined()
+  })
+
+  it('keeps bag sources through an export and import round trip', () => {
+    const imported = parseBackup(JSON.stringify(buildBackup(combinedState())))
+    expect(imported.ok).toBe(true)
+    if (!imported.ok) return
+    expect(imported.state.bags[1].sources).toEqual([
+      { batchId: 1, weight: 100 },
+      { batchId: 2, weight: 100 },
+    ])
+    expect(buildBackup(imported.state).formatVersion).toBe(2)
+  })
+
+  it('rejects bag sources that point at a missing roast, do not add up, or are negative', () => {
+    type Doc = { bags: { sources: { batchId: number; weight: number }[] }[] }
+    const missing = buildBackup(combinedState()) as unknown as Doc
+    missing.bags[1].sources[1].batchId = 99
+    const missingResult = parseBackup(JSON.stringify(missing))
+    expect(missingResult.ok).toBe(false)
+    if (missingResult.ok) return
+    expect(missingResult.error).toMatch(/missing roast/i)
+
+    const badSum = buildBackup(combinedState()) as unknown as Doc
+    badSum.bags[1].sources[1].weight = 50
+    const sumResult = parseBackup(JSON.stringify(badSum))
+    expect(sumResult.ok).toBe(false)
+    if (sumResult.ok) return
+    expect(sumResult.error).toMatch(/add up/i)
+
+    const negative = buildBackup(combinedState()) as unknown as Doc
+    negative.bags[1].sources = [
+      { batchId: 1, weight: 250 },
+      { batchId: 2, weight: -50 },
+    ]
+    const negativeResult = parseBackup(JSON.stringify(negative))
+    expect(negativeResult.ok).toBe(false)
+    if (negativeResult.ok) return
+    expect(negativeResult.error).toMatch(/negative/i)
   })
 
   it('rejects a sale that points at a missing bag and a negative weight', () => {

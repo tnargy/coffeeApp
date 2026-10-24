@@ -11,7 +11,7 @@ import type {
 import { SETTINGS_ID } from './units.ts'
 import { batchPools } from './domain/rules.ts'
 
-export const BACKUP_FORMAT_VERSION = 1
+export const BACKUP_FORMAT_VERSION = 2
 
 export interface BackupDocument {
   formatVersion: number
@@ -127,6 +127,26 @@ export function parseBackup(text: string): BackupParseResult {
     if (isNegative(bag.weight)) return { ok: false, error: 'That backup has a negative bag weight.' }
     if (!batchIds.has(bag.batchId)) {
       return { ok: false, error: 'That backup has a bag that points to a missing roast.' }
+    }
+    if (bag.sources != null) {
+      const sources: unknown = bag.sources
+      if (!Array.isArray(sources) || sources.length === 0) {
+        return { ok: false, error: 'That backup has a bag with invalid sources.' }
+      }
+      let total = 0
+      for (const source of sources) {
+        if (!isRecord(source) || typeof source.weight !== 'number' || !Number.isFinite(source.weight)) {
+          return { ok: false, error: 'That backup has a bag with invalid sources.' }
+        }
+        if (source.weight < 0) return { ok: false, error: 'That backup has a negative bag source weight.' }
+        if (typeof source.batchId !== 'number' || !batchIds.has(source.batchId)) {
+          return { ok: false, error: 'That backup has a bag source that points to a missing roast.' }
+        }
+        total += source.weight
+      }
+      if (Math.abs(total - bag.weight) > 0.01) {
+        return { ok: false, error: 'That backup has a bag whose sources do not add up to its weight.' }
+      }
     }
   }
 

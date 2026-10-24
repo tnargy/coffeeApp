@@ -3,7 +3,7 @@ import { db, resetDatabase } from '../db.ts'
 import { buildBackup } from '../backup.ts'
 import { SETTINGS_ID } from '../units.ts'
 import type { RoastBatch } from '../types.ts'
-import { crud, editRecord, ensureReady, importBackup, loadState, logRoast, voidRecord } from './repository.ts'
+import { crud, editRecord, ensureReady, importBackup, loadState, logRoast, packBatch, voidRecord } from './repository.ts'
 
 beforeEach(async () => {
   await resetDatabase()
@@ -171,6 +171,37 @@ describe('persistence', () => {
     expect(state.audit).toHaveLength(2)
     expect(state.audit[0].action).toBe('edit')
     expect(state.audit[1].action).toBe('void')
+  })
+
+  it('persists a pack that combines two batches and restores both on void', async () => {
+    await ensureReady()
+    const lot = await receiveTestLot()
+    const profile = { beansName: 'Ethiopia', chargeTemp: 380, batchSize: 500, dtr: 20, weightLossPercent: 20 }
+    for (const [day, yieldGrams] of [['02', 300], ['03', 500]] as const) {
+      const roasted = await logRoast({
+        greenLotId: lot.lots[0].id,
+        greenWeightCharged: 500,
+        roastedYield: yieldGrams,
+        classification: 'for-sale',
+        roastDate: `2026-06-${day}T00:00:00.000Z`,
+        profile,
+      })
+      expect(roasted.ok).toBe(true)
+    }
+    const packed = await packBatch({ batchIds: [1, 2], bagCount: 2, weightPerBag: 200, classification: 'for-sale', now: Date.now() })
+    expect(packed.ok).toBe(true)
+    const stored = await loadState()
+    expect(stored.bags).toHaveLength(2)
+    expect(stored.bags[1].sources).toEqual([
+      { batchId: 1, weight: 100 },
+      { batchId: 2, weight: 100 },
+    ])
+    expect(stored.batches.map((batch) => batch.roastedWeightRemaining)).toEqual([0, 400])
+
+    const voided = await voidRecord({ entity: 'bagging', batchId: 1, createdAt: stored.bags[0].createdAt }, 'Miscount')
+    expect(voided.ok).toBe(true)
+    const after = await loadState()
+    expect(after.batches.map((batch) => batch.roastedWeightRemaining)).toEqual([300, 500])
   })
 
   it('replaces local data with a valid backup', async () => {

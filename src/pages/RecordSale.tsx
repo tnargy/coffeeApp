@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorBanner, Field, SuccessBanner } from '../components/Field.tsx'
 import { sellBags } from '../data/repository.ts'
-import { bagClassification } from '../domain/rules.ts'
+import { bagClassification, bagSources } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import { classificationLabel } from '../labels.ts'
 import { currentLocalInput, formatGrams, fromLocalInput } from '../units.ts'
@@ -72,16 +72,25 @@ export function RecordSale() {
           <legend>Available bags</legend>
           <ul className="checks">
             {available.map((bag) => {
-              const batch = state.batches.find((item) => item.id === bag.batchId)
-              const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
+              const sources = bagSources(bag)
+              const batchLabel = sources.length > 1 ? `batches ${sources.map((source) => `#${source.batchId}`).join(' + ')}` : `batch #${sources[0].batchId}`
+              const origins = [
+                ...new Set(
+                  sources.flatMap((source) => {
+                    const batch = state.batches.find((item) => item.id === source.batchId)
+                    const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
+                    return lot ? [lot.origin] : []
+                  }),
+                ),
+              ]
               return (
                 <li key={bag.id}>
                   <label>
                     <input type="checkbox" checked={selected.includes(bag.id)} onChange={() => toggle(bag.id)} />
                     <span>
-                      Bag #{bag.id} · {formatGrams(bag.weight)} · {bag.bagSizeOz} oz · batch #{bag.batchId}
+                      Bag #{bag.id} · {formatGrams(bag.weight)} · {bag.bagSizeOz} oz · {batchLabel}
                       {` · ${classificationLabel(bagClassification(state, bag))}`}
-                      {lot ? ` · ${lot.origin}` : ''}
+                      {origins.length ? ` · ${origins.join(' + ')}` : ''}
                     </span>
                   </label>
                 </li>

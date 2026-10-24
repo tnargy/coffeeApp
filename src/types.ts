@@ -54,9 +54,21 @@ export interface RoastBatch {
   voidReason?: string
 }
 
+export interface BagSource {
+  batchId: number
+  weight: number
+}
+
 export interface BaggedUnit {
   id: number
+  /**
+   * The bagging's anchor: the first batch that supplied weight to the pack. Together with
+   * `createdAt` it identifies the bagging. For a pack drawn from several batches it is NOT the
+   * only source of this bag; use `sources` (via `bagSources`) to ask which batches supplied it.
+   */
   batchId: number
+  /** Grams taken from each batch. Absent on single-batch bags, which came wholly from `batchId`. */
+  sources?: BagSource[]
   bagSizeOz: number
   weight: number
   classification?: Classification

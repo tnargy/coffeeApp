@@ -2,6 +2,7 @@ import type {
   AppState,
   AuditChange,
   AuditEntry,
+  BagSource,
   BaggedUnit,
   BatchStatus,
   Classification,
@@ -80,7 +81,9 @@ export interface RecordRoastInput {
 }
 
 export interface PackBagsInput {
-  batchId: number
+  batchId?: number
+  /** Ordered batches to draw from. Takes precedence over `batchId`. */
+  batchIds?: number[]
   bagCount: number
   weightPerBag: number
   classification?: Classification
@@ -229,9 +232,9 @@ export function personalCharged(state: AppState, lotId: number): number {
       .reduce((sum, batch) => {
         if (batch.roastedYield <= 0) return sum
         const pools = batchPools(batch)
-        const personalBagged = state.bags
-          .filter((bag) => bag.batchId === batch.id && !isVoided(bag) && bagClassification(state, bag) === 'internal')
-          .reduce((bagSum, bag) => bagSum + bag.weight, 0)
+        const personalBagged = liveBags(state, batch.id)
+          .filter((bag) => bagClassification(state, bag) === 'internal')
+          .reduce((bagSum, bag) => bagSum + weightFromBatch(bag, batch.id), 0)
         return sum + batch.greenWeightCharged * (pools.personalRemaining + personalBagged) / batch.roastedYield
       }, 0),
   )
@@ -389,12 +392,34 @@ export function recordRoast(state: AppState, input: RecordRoastInput): DomainRes
   return { ok: true, state: next }
 }
 
+/** Drain the batches in the order given until the total is met. Batches that supply nothing are left out. */
+export function drawFromBatches<T extends { roastedWeightRemaining: number }>(batches: T[], total: number): { batch: T; take: number }[] {
+  const draws: { batch: T; take: number }[] = []
+  let needed = roundGrams(total)
+  for (const batch of batches) {
+    if (needed <= 0) break
+    const take = Math.min(roundGrams(batch.roastedWeightRemaining), needed)
+    if (take <= 0) continue
+    draws.push({ batch, take })
+    needed = roundGrams(needed - take)
+  }
+  return draws
+}
+
 export function packBags(state: AppState, input: PackBagsInput): DomainResult {
   const now = input.now ?? Date.now()
-  const batch = state.batches.find((item) => item.id === input.batchId)
-  if (!batch) return fail(state, 'Select a roast batch.')
-  if (batch.roastedWeightRemaining <= 0) {
-    return fail(state, 'This batch is no longer offered for bagging.')
+  const ids = input.batchIds ?? (input.batchId != null ? [input.batchId] : [])
+  if (!ids.length) return fail(state, 'Select a roast batch.')
+  if (new Set(ids).size !== ids.length) return fail(state, 'Select each roast batch only once.')
+  const batches: RoastBatch[] = []
+  for (const id of ids) {
+    const found = state.batches.find((item) => item.id === id)
+    if (!found) return fail(state, 'Select a roast batch.')
+    if (isVoided(found)) return fail(state, `Batch #${found.id} is void and cannot be packed.`)
+    if (found.roastedWeightRemaining <= 0) {
+      return fail(state, ids.length > 1 ? `Batch #${found.id} is no longer offered for bagging.` : 'This batch is no longer offered for bagging.')
+    }
+    batches.push(found)
   }
   if (!Number.isInteger(input.bagCount) || input.bagCount < 1) return fail(state, 'Enter at least one bag.')
   if (!isFiniteNumber(input.weightPerBag) || input.weightPerBag <= 0) {
@@ -404,30 +429,50 @@ export function packBags(state: AppState, input: PackBagsInput): DomainResult {
   if (!isFiniteNumber(bagSizeOz) || bagSizeOz <= 0) return fail(state, 'Bag size must be greater than zero.')
   const each = roundGrams(input.weightPerBag)
   const total = roundGrams(each * input.bagCount)
-  const available = roundGrams(batch.roastedWeightRemaining)
+  const available = roundGrams(batches.reduce((sum, batch) => sum + batch.roastedWeightRemaining, 0))
   if (total > available) return { ok: false, state, error: shortfall('roasted', available, total) }
-  const classification = input.classification ?? batch.classification
+  const classification = input.classification ?? batches[0].classification
   if (classification !== 'internal' && classification !== 'for-sale') {
     return fail(state, 'Choose personal use or for sale for this pack.')
   }
-  const pools = batchPools(batch)
-  const oppositeAvailable = classification === 'internal' ? pools.forSaleRemaining : pools.personalRemaining
-  const fromOpposite = Math.min(total, oppositeAvailable)
-  const fromChosen = roundGrams(total - fromOpposite)
-  const personalRemaining = roundGrams(
-    pools.personalRemaining - (classification === 'internal' ? fromChosen : fromOpposite),
-  )
-  const forSaleRemaining = roundGrams(
-    pools.forSaleRemaining - (classification === 'internal' ? fromOpposite : fromChosen),
-  )
+
+  const draws = drawFromBatches(batches, total)
+  const updates = new Map<number, { personalRemaining: number; forSaleRemaining: number }>()
+  for (const { batch, take } of draws) {
+    const pools = batchPools(batch)
+    const oppositeAvailable = classification === 'internal' ? pools.forSaleRemaining : pools.personalRemaining
+    const fromOpposite = Math.min(take, oppositeAvailable)
+    const fromChosen = roundGrams(take - fromOpposite)
+    updates.set(batch.id, {
+      personalRemaining: roundGrams(pools.personalRemaining - (classification === 'internal' ? fromChosen : fromOpposite)),
+      forSaleRemaining: roundGrams(pools.forSaleRemaining - (classification === 'internal' ? fromOpposite : fromChosen)),
+    })
+  }
+
+  const combined = draws.length > 1
+  const anchorId = draws[0].batch.id
+  const queue = draws.map((draw) => ({ batchId: draw.batch.id, left: draw.take }))
+  let position = 0
   const createdAt = input.createdAt ?? new Date(now).toISOString()
   const next = structuredClone(state)
   let id = nextId(state.bags)
   const bags: BaggedUnit[] = []
   for (let i = 0; i < input.bagCount; i += 1) {
+    const sources: BagSource[] = []
+    let need = each
+    while (need > 0 && position < queue.length) {
+      const entry = queue[position]
+      const part = Math.min(entry.left, need)
+      sources.push({ batchId: entry.batchId, weight: part })
+      entry.left = roundGrams(entry.left - part)
+      need = roundGrams(need - part)
+      if (entry.left <= 0) position += 1
+    }
+    if (need > 0 && sources.length) sources[sources.length - 1].weight = roundGrams(sources[sources.length - 1].weight + need)
     bags.push({
       id,
-      batchId: batch.id,
+      batchId: anchorId,
+      ...(combined ? { sources } : {}),
       bagSizeOz,
       weight: each,
       classification,
@@ -438,15 +483,16 @@ export function packBags(state: AppState, input: PackBagsInput): DomainResult {
   }
   next.bags.push(...bags)
   next.batches = next.batches.map((item) => {
-    if (item.id !== batch.id) return item
-    const remaining = roundGrams(personalRemaining + forSaleRemaining)
-    const updated = { ...item, personalRemaining, forSaleRemaining, roastedWeightRemaining: remaining }
+    const update = updates.get(item.id)
+    if (!update) return item
+    const remaining = roundGrams(update.personalRemaining + update.forSaleRemaining)
+    const updated = { ...item, ...update, roastedWeightRemaining: remaining }
     return { ...updated, status: deriveStatus(updated) }
   })
   return {
     ok: true,
     state: next,
-    info: `Packed ${input.bagCount} bag(s), ${total} g.`,
+    info: `Packed ${input.bagCount} bag(s), ${total} g${combined ? ` from ${draws.length} batches` : ''}.`,
   }
 }
 
@@ -667,12 +713,28 @@ export function baggingKey(batchId: number, createdAt: string): string {
   return `bagging:${batchId}:${createdAt}`
 }
 
+export function bagSources(bag: BaggedUnit): BagSource[] {
+  return bag.sources?.length ? bag.sources : [{ batchId: bag.batchId, weight: bag.weight }]
+}
+
+export function weightFromBatch(bag: BaggedUnit, batchId: number): number {
+  return roundGrams(bagSources(bag).filter((source) => source.batchId === batchId).reduce((sum, source) => sum + source.weight, 0))
+}
+
+export function bagsFromBatch(state: AppState, batchId: number): BaggedUnit[] {
+  return state.bags.filter((bag) => bagSources(bag).some((source) => source.batchId === batchId))
+}
+
+export function isCombinedBag(bag: BaggedUnit): boolean {
+  return bag.sources != null
+}
+
 export function liveBags(state: AppState, batchId: number): BaggedUnit[] {
-  return state.bags.filter((bag) => bag.batchId === batchId && !isVoided(bag))
+  return bagsFromBatch(state, batchId).filter((bag) => !isVoided(bag))
 }
 
 export function livePackedWeight(state: AppState, batchId: number): number {
-  return roundGrams(liveBags(state, batchId).reduce((sum, bag) => sum + bag.weight, 0))
+  return roundGrams(liveBags(state, batchId).reduce((sum, bag) => sum + weightFromBatch(bag, batchId), 0))
 }
 
 export function editRecord(state: AppState, target: RecordTarget, changes: RecordChanges, note: string): DomainResult {
@@ -827,6 +889,9 @@ function editBagging(state: AppState, batchId: number, createdAt: string, change
     const value = roundGrams(changes.weightPerBag)
     if (!isFiniteNumber(value) || value <= 0) return fail(state, 'Weight per bag must be greater than zero.')
     const oldWeight = live[0].weight
+    if (value !== oldWeight && live.some(isCombinedBag)) {
+      return fail(state, 'This bagging drew from more than one roast, so its weight per bag cannot be edited. Void the bagging and pack again.')
+    }
     if (value !== oldWeight) {
       const oldTotal = roundGrams(oldWeight * live.length)
       const newTotal = roundGrams(value * live.length)
@@ -935,7 +1000,7 @@ function voidBatch(state: AppState, id: number, note: string): DomainResult {
   const batch = state.batches.find((item) => item.id === id)
   if (!batch) return fail(state, 'Roast not found.')
   if (isVoided(batch)) return fail(state, 'This roast is already void.')
-  const liveBag = state.bags.find((bag) => bag.batchId === id && !isVoided(bag))
+  const liveBag = liveBags(state, id)[0]
   if (liveBag) return fail(state, `Void the bagging from ${formatWhen(liveBag.createdAt)} first.`)
   const next = structuredClone(state)
   const target = next.batches.find((item) => item.id === id)
@@ -961,21 +1026,26 @@ function voidBagging(state: AppState, batchId: number, createdAt: string, note: 
   if (soldSale) return fail(state, `Void the sale from ${formatDate(soldSale.date)} first.`)
   const next = structuredClone(state)
   const at = new Date().toISOString()
-  let personalTotal = 0
-  let forSaleTotal = 0
+  const returns = new Map<number, { personal: number; forSale: number }>()
   for (const bag of next.bags) {
     if (bag.batchId === batchId && bag.createdAt === createdAt && !isVoided(bag)) {
       bag.voidedAt = at
       bag.voidReason = note
-      if (bagClassification(next, bag) === 'internal') personalTotal += bag.weight
-      else forSaleTotal += bag.weight
+      const internal = bagClassification(next, bag) === 'internal'
+      for (const source of bagSources(bag)) {
+        const entry = returns.get(source.batchId) ?? { personal: 0, forSale: 0 }
+        if (internal) entry.personal += source.weight
+        else entry.forSale += source.weight
+        returns.set(source.batchId, entry)
+      }
     }
   }
-  const batch = next.batches.find((item) => item.id === batchId)
-  if (batch) {
+  for (const [sourceId, entry] of returns) {
+    const batch = next.batches.find((item) => item.id === sourceId)
+    if (!batch) continue
     const pools = batchPools(batch)
-    batch.personalRemaining = roundGrams(pools.personalRemaining + personalTotal)
-    batch.forSaleRemaining = roundGrams(pools.forSaleRemaining + forSaleTotal)
+    batch.personalRemaining = roundGrams(pools.personalRemaining + entry.personal)
+    batch.forSaleRemaining = roundGrams(pools.forSaleRemaining + entry.forSale)
     batch.roastedWeightRemaining = roundGrams(batch.personalRemaining + batch.forSaleRemaining)
   }
   appendAudit(state, next, 'bagging', baggingKey(batchId, createdAt), 'void', note, [{ field: 'Status', from: 'live', to: 'void' }], at)
@@ -1006,19 +1076,34 @@ export function saleSources(state: AppState, sale: Sale) {
     const batch = bag ? state.batches.find((item) => item.id === bag.batchId) : undefined
     const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
     const profile = batch ? profileFacts(state, batch) : undefined
-    return { bag, batch, lot, profile }
+    const parts = bag
+      ? bagSources(bag).flatMap((source) => {
+          const sourceBatch = state.batches.find((item) => item.id === source.batchId)
+          if (!sourceBatch) return []
+          return [
+            {
+              batch: sourceBatch,
+              lot: state.lots.find((item) => item.id === sourceBatch.greenLotId),
+              profile: profileFacts(state, sourceBatch),
+              weight: source.weight,
+            },
+          ]
+        })
+      : []
+    return { bag, batch, lot, profile, parts }
   })
 }
 
 export function costOfBag(state: AppState, bag: BaggedUnit): number {
-  const batch = state.batches.find((item) => item.id === bag.batchId)
-  if (!batch || batch.roastedYield <= 0) return 0
-  const lot = state.lots.find((item) => item.id === batch.greenLotId)
-  if (!lot || lot.weightReceived <= 0) return 0
-  const greenEquiv = bag.weight * (batch.greenWeightCharged / batch.roastedYield)
-  return greenEquiv * (lot.totalCost / lot.weightReceived)
+  return bagSources(bag).reduce((sum, source) => {
+    const batch = state.batches.find((item) => item.id === source.batchId)
+    if (!batch || batch.roastedYield <= 0) return sum
+    const lot = state.lots.find((item) => item.id === batch.greenLotId)
+    if (!lot || lot.weightReceived <= 0) return sum
+    const greenEquiv = source.weight * (batch.greenWeightCharged / batch.roastedYield)
+    return sum + greenEquiv * (lot.totalCost / lot.weightReceived)
+  }, 0)
 }
-
 export function pnl(state: AppState) {
   const revenue = roundMoney(
     state.sales.filter((sale) => !isVoided(sale)).reduce((sum, sale) => sum + sale.saleAmount, 0),
@@ -1059,20 +1144,25 @@ export function batchTrail(state: AppState, batchId: number): TrailEvent[] {
     title: 'Roast',
       detail: `Charged ${roundGrams(batch.greenWeightCharged)} g, yield ${roundGrams(batch.roastedYield)} g. ${batchClassificationLabel(batch)}. Profile: ${profileLabel(profile)}, charge ${profile?.chargeTemp ?? 'n/a'}, batch size ${profile?.batchSize ?? 'n/a'} g, DTR ${profile?.dtr ?? 'n/a'}%, weight loss ${batch.weightLossPercent}%.${voidMarker(batch)}`,
   })
-  const bags = state.bags.filter((bag) => bag.batchId === batch.id)
+  const bags = bagsFromBatch(state, batch.id)
   const grouped = new Map<string, BaggedUnit[]>()
   for (const bag of bags) {
-    const group = grouped.get(bag.createdAt) ?? []
+    const key = `${bag.batchId}|${bag.createdAt}`
+    const group = grouped.get(key) ?? []
     group.push(bag)
-    grouped.set(bag.createdAt, group)
+    grouped.set(key, group)
   }
-  for (const [at, group] of grouped) {
-    const total = roundGrams(group.reduce((sum, bag) => sum + bag.weight, 0))
+  for (const group of grouped.values()) {
+    const total = roundGrams(group.reduce((sum, bag) => sum + weightFromBatch(bag, batch.id), 0))
+    const others = [
+      ...new Set(group.flatMap((bag) => bagSources(bag).map((source) => source.batchId)).filter((id) => id !== batch.id)),
+    ].sort((a, b) => a - b)
+    const combined = others.length ? ` (a combined pack that also drew from ${others.map((id) => `Batch #${id}`).join(', ')})` : ''
     events.push({
-      at,
+      at: group[0].createdAt,
       kind: 'bagged',
       title: 'Bagging',
-      detail: `Packed ${group.length} bag(s), ${total} g for ${bagClassification(state, group[0]) === 'internal' ? 'personal use' : 'sale'}.${voidMarker(group[0])}`,
+      detail: `Packed ${group.length} bag(s), ${total} g for ${bagClassification(state, group[0]) === 'internal' ? 'personal use' : 'sale'}${combined}.${voidMarker(group[0])}`,
     })
   }
   const bagIds = new Set(bags.map((bag) => bag.id))
@@ -1144,14 +1234,22 @@ export function recentActivity(state: AppState, limit = 8): ActivityEvent[] {
   }
   for (const [key, group] of bagGroups) {
     const total = roundGrams(group.reduce((sum, bag) => sum + bag.weight, 0))
-    const batch = state.batches.find((item) => item.id === group[0].batchId)
-    const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
+    const sourceIds = [...new Set(group.flatMap((bag) => bagSources(bag).map((source) => source.batchId)))]
+    const sourceOrigins = [
+      ...new Set(
+        sourceIds.flatMap((sourceId) => {
+          const batch = state.batches.find((item) => item.id === sourceId)
+          const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
+          return lot ? [lot.origin] : []
+        }),
+      ),
+    ]
     events.push({
       id: `bags-${key}`,
       at: group[0].createdAt,
       kind: 'bagged',
       text: `Packaged ${group.length} bag${group.length === 1 ? '' : 's'} (${group[0].bagSizeOz} oz)${isVoided(group[0]) ? ' · voided' : ''}`,
-      detail: `${lot?.origin ?? `Batch #${group[0].batchId}`} · ${formatGrams(total)} · ${bagClassification(state, group[0]) === 'internal' ? 'personal use' : 'for sale'}`,
+      detail: `${sourceOrigins.length ? sourceOrigins.join(' + ') : `Batch #${group[0].batchId}`} · ${formatGrams(total)} · ${bagClassification(state, group[0]) === 'internal' ? 'personal use' : 'for sale'}`,
     })
   }
   for (const sale of state.sales) {
@@ -1159,9 +1257,12 @@ export function recentActivity(state: AppState, limit = 8): ActivityEvent[] {
       ...new Set(
         sale.baggedUnitIds.flatMap((id) => {
           const bag = state.bags.find((item) => item.id === id)
-          const batch = bag ? state.batches.find((item) => item.id === bag.batchId) : undefined
-          const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
-          return lot ? [lot.origin] : []
+          if (!bag) return []
+          return bagSources(bag).flatMap((source) => {
+            const batch = state.batches.find((item) => item.id === source.batchId)
+            const lot = batch ? state.lots.find((item) => item.id === batch.greenLotId) : undefined
+            return lot ? [lot.origin] : []
+          })
         }),
       ),
     ]
@@ -1183,12 +1284,9 @@ export function dashboardSummary(state: AppState): DashboardSummary {
     .map((batch) => ({ batch: withDerivedStatus(batch), profile: profileFacts(state, batch) }))
   const trail = state.batches
     .map(withDerivedStatus)
-    .filter((batch) => {
-      const bags = state.bags.filter((bag) => bag.batchId === batch.id)
-      return bags.length > 0
-    })
+    .filter((batch) => bagsFromBatch(state, batch.id).length > 0)
     .map((batch) => {
-      const bags = state.bags.filter((bag) => bag.batchId === batch.id)
+      const bags = bagsFromBatch(state, batch.id)
       return {
         batch,
         bagged: bags.length,

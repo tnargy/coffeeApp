@@ -2,13 +2,24 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorBanner, Field, SuccessBanner } from '../components/Field.tsx'
 import { editRecord, voidRecord } from '../data/repository.ts'
-import { bagClassification, batchKey, baggingKey, batchClassificationLabel, batchPools, isVoided, saleKey, voidMarker } from '../domain/rules.ts'
+import {
+  bagClassification,
+  bagSources,
+  batchKey,
+  baggingKey,
+  batchClassificationLabel,
+  batchPools,
+  isCombinedBag,
+  isVoided,
+  saleKey,
+  voidMarker,
+} from '../domain/rules.ts'
 import type { RecordChanges, RecordTarget } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import type { AuditEntry, BaggedUnit } from '../types.ts'
-import { formatDate, formatGrams, formatMoney, formatWhen } from '../units.ts'
+import { formatDate, formatGrams, formatMoney, formatWhen, roundGrams } from '../units.ts'
 
-type Mode = { action: 'edit' | 'void'; key: string; label: string }
+type Mode = { action: 'edit' | 'void'; key: string; label: string; combined?: boolean }
 
 export function Records() {
   const state = useAppState()
@@ -22,8 +33,8 @@ export function Records() {
 
   const bagGroups = groupBaggings(state.bags)
 
-  function startEdit(target: RecordTarget, label: string, changes: RecordChanges) {
-    setMode({ action: 'edit', key: keyOf(target), label })
+  function startEdit(target: RecordTarget, label: string, changes: RecordChanges, combined = false) {
+    setMode({ action: 'edit', key: keyOf(target), label, combined })
     setDraft(changes)
     setNote('')
     setError(null)
@@ -117,13 +128,20 @@ export function Records() {
               ) : null}
               {mode.key.startsWith('bagging:') ? (
                 <>
-                  <Field label="Weight per bag (g)">
-                    <input
-                      value={String(draft.weightPerBag ?? '')}
-                      onChange={(event) => setDraft({ ...draft, weightPerBag: Number(event.target.value) })}
-                      inputMode="decimal"
-                    />
-                  </Field>
+                  {mode.combined ? (
+                    <p className="muted">
+                      This bagging drew from more than one roast, so its weight per bag cannot be edited. Void the bagging and
+                      pack again to change it. Bag size can still be changed.
+                    </p>
+                  ) : (
+                    <Field label="Weight per bag (g)">
+                      <input
+                        value={String(draft.weightPerBag ?? '')}
+                        onChange={(event) => setDraft({ ...draft, weightPerBag: Number(event.target.value) })}
+                        inputMode="decimal"
+                      />
+                    </Field>
+                  )}
                   <Field label="Bag size (oz)">
                     <input
                       value={String(draft.bagSizeOz ?? '')}
@@ -242,7 +260,9 @@ export function Records() {
           {bagGroups.map(({ batchId, createdAt, bags }) => {
             const total = bags.reduce((sum, bag) => sum + bag.weight, 0)
             const batch = state.batches.find((item) => item.id === batchId)
-            const label = `Bagging from Batch #${batchId}`
+            const shares = sourceShares(bags)
+            const combined = bags.some(isCombinedBag)
+            const label = combined ? `Bagging from ${shares.map((share) => `Batch #${share.batchId}`).join(', ')}` : `Bagging from Batch #${batchId}`
             return (
               <li key={`${batchId}-${createdAt}`} className="card">
                 <strong>{label}</strong>
@@ -250,6 +270,9 @@ export function Records() {
                   {bags.length} bag{bags.length === 1 ? '' : 's'} · {formatGrams(total)} · {bags[0].bagSizeOz} oz ·{' '}
                   {bagClassification(state, bags[0]) === 'internal' ? 'personal use · ' : 'for sale · '}{formatWhen(createdAt)}
                 </p>
+                {combined ? (
+                  <p className="muted">Combined pack: {shares.map((share) => `Batch #${share.batchId} ${formatGrams(share.weight)}`).join(', ')}</p>
+                ) : null}
                 {isVoided(bags[0]) ? <p className="muted">{voidMarker(bags[0]).trim()}</p> : null}
                 <RecordActions
                   label={label}
@@ -258,7 +281,8 @@ export function Records() {
                     startEdit(
                       { entity: 'bagging', batchId, createdAt },
                       label,
-                      { weightPerBag: bags[0].weight, bagSizeOz: bags[0].bagSizeOz },
+                      combined ? { bagSizeOz: bags[0].bagSizeOz } : { weightPerBag: bags[0].weight, bagSizeOz: bags[0].bagSizeOz },
+                      combined,
                     )
                   }
                   onVoid={() => startVoid({ entity: 'bagging', batchId, createdAt }, label)}
@@ -374,6 +398,14 @@ function groupBaggings(bags: BaggedUnit[]) {
     const [batchId, ...rest] = key.split(':')
     return { batchId: Number(batchId), createdAt: rest.join(':'), bags: group }
   })
+}
+
+function sourceShares(bags: BaggedUnit[]): { batchId: number; weight: number }[] {
+  const shares = new Map<number, number>()
+  for (const bag of bags) {
+    for (const source of bagSources(bag)) shares.set(source.batchId, (shares.get(source.batchId) ?? 0) + source.weight)
+  }
+  return [...shares.entries()].map(([batchId, weight]) => ({ batchId, weight: roundGrams(weight) })).sort((a, b) => a.batchId - b.batchId)
 }
 
 function keyOf(target: RecordTarget): string {

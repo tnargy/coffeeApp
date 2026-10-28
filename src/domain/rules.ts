@@ -23,6 +23,7 @@ import {
   formatMoney,
   formatGrams,
   formatPounds,
+  formatTime,
   formatWhen,
   roundGrams,
   roundMoney,
@@ -52,6 +53,9 @@ export interface ProfileInput {
   dtr: number
   weightLossPercent: number
   notes?: string
+  totalTimeSeconds?: number
+  firstCrackSeconds?: number
+  dropTemp?: number
 }
 
 export interface ReceiveLotInput {
@@ -267,6 +271,15 @@ export function roastedUse(state: AppState) {
   }
 }
 
+export function roastTimingText(
+  facts: Pick<ProfileSnapshot, 'totalTimeSeconds' | 'firstCrackSeconds' | 'dropTemp'> | undefined,
+): string {
+  const total = facts?.totalTimeSeconds == null ? '—' : formatTime(facts.totalTimeSeconds)
+  const crack = facts?.firstCrackSeconds == null ? '—' : formatTime(facts.firstCrackSeconds)
+  const drop = facts?.dropTemp == null ? '—' : `${facts.dropTemp}°C`
+  return `total ${total} · first crack ${crack} · drop ${drop}`
+}
+
 export function missingProfileFields(profile: Partial<ProfileInput> | undefined): string[] {
   if (!profile) return ['beans name', 'charge temperature', 'batch size', 'DTR', 'weight loss percent']
   const missing: string[] = []
@@ -352,7 +365,7 @@ export function recordRoast(state: AppState, input: RecordRoastInput): DomainRes
   if (resolved.updateSource && resolved.sourceId != null) {
     next.profiles = next.profiles.map((item) =>
       item.id === resolved.sourceId
-        ? { ...item, ...resolved.facts, id: item.id, createdAt: item.createdAt ?? recordedAt, updatedAt: recordedAt }
+        ? replaceProfileFacts(item, resolved.facts, recordedAt)
         : item,
     )
   }
@@ -588,6 +601,14 @@ export function applyEntityUpdate(state: AppState, update: EntityUpdate): Domain
     const merged = { ...current, ...update.patch, id: current.id, updatedAt: new Date().toISOString() }
     if ('name' in update.patch) merged.name = blankToUndefined(update.patch.name)
     if ('notes' in update.patch) merged.notes = blankToUndefined(update.patch.notes)
+    const timing = {
+      totalTimeSeconds: 'totalTimeSeconds' in update.patch ? update.patch.totalTimeSeconds : merged.totalTimeSeconds,
+      firstCrackSeconds: 'firstCrackSeconds' in update.patch ? update.patch.firstCrackSeconds : merged.firstCrackSeconds,
+      dropTemp: 'dropTemp' in update.patch ? update.patch.dropTemp : merged.dropTemp,
+    }
+    const timingProblem = timingError(timing)
+    if (timingProblem) return fail(state, timingProblem)
+    writeTiming(merged, timing, update.patch)
     const missing = missingProfileFields(merged)
     if (missing.length) return { ok: false, state, error: incompleteProfile(missing) }
     next.profiles = next.profiles.map((item) => (item.id === current.id ? merged : item))
@@ -621,6 +642,8 @@ export function removeProfile(state: AppState, id: number): DomainResult {
 export function addProfile(state: AppState, input: ProfileInput): DomainResult {
   const missing = missingProfileFields(input)
   if (missing.length) return { ok: false, state, error: incompleteProfile(missing) }
+  const timingProblem = timingError(input)
+  if (timingProblem) return fail(state, timingProblem)
   const next = structuredClone(state)
   const recordedAt = new Date().toISOString()
   next.profiles.push({
@@ -632,6 +655,7 @@ export function addProfile(state: AppState, input: ProfileInput): DomainResult {
     dtr: input.dtr,
     weightLossPercent: input.weightLossPercent,
     notes: blankToUndefined(input.notes),
+    ...copyTiming(input),
     createdAt: recordedAt,
     updatedAt: recordedAt,
   })
@@ -647,6 +671,7 @@ export function snapshotOf(profile: ProfileSnapshot): ProfileSnapshot {
     dtr: profile.dtr,
     weightLossPercent: profile.weightLossPercent,
     notes: blankToUndefined(profile.notes),
+    ...copyTiming(profile),
   }
 }
 
@@ -674,6 +699,7 @@ export function profileFacts(state: AppState, batch: RoastBatch): ProfileSnapsho
     dtr: live.dtr,
     weightLossPercent: live.weightLossPercent,
     notes: live.notes,
+    ...copyTiming(live),
   }
 }
 
@@ -1142,7 +1168,7 @@ export function batchTrail(state: AppState, batchId: number): TrailEvent[] {
     at: batch.roastDate,
     kind: 'roasted',
     title: 'Roast',
-      detail: `Charged ${roundGrams(batch.greenWeightCharged)} g, yield ${roundGrams(batch.roastedYield)} g. ${batchClassificationLabel(batch)}. Profile: ${profileLabel(profile)}, charge ${profile?.chargeTemp ?? 'n/a'}, batch size ${profile?.batchSize ?? 'n/a'} g, DTR ${profile?.dtr ?? 'n/a'}%, weight loss ${batch.weightLossPercent}%.${voidMarker(batch)}`,
+      detail: `Charged ${roundGrams(batch.greenWeightCharged)} g, yield ${roundGrams(batch.roastedYield)} g. ${batchClassificationLabel(batch)}. Profile: ${profileLabel(profile)}, charge ${profile?.chargeTemp ?? 'n/a'}, batch size ${profile?.batchSize ?? 'n/a'} g, DTR ${profile?.dtr ?? 'n/a'}%, weight loss ${batch.weightLossPercent}%. ${roastTimingText(profile)}.${voidMarker(batch)}`,
   })
   const bags = bagsFromBatch(state, batch.id)
   const grouped = new Map<string, BaggedUnit[]>()
@@ -1222,7 +1248,7 @@ export function recentActivity(state: AppState, limit = 8): ActivityEvent[] {
       at: batch.roastDate,
       kind: 'roasted',
       text: `Roasted ${formatGrams(batch.roastedYield)} of ${label === 'unknown' ? (lot?.origin ?? 'coffee') : label}${isVoided(batch) ? ' · voided' : ''}`,
-      detail: `Batch #${batch.id} · ${batchClassificationLabel(batch)} · ${formatGrams(batch.greenWeightCharged)} charged`,
+      detail: `Batch #${batch.id} · ${batchClassificationLabel(batch)} · ${formatGrams(batch.greenWeightCharged)} charged · ${roastTimingText(profile)}`,
     })
   }
   const bagGroups = new Map<string, BaggedUnit[]>()
@@ -1315,6 +1341,13 @@ function resolveProfile(
   const source = input.profileId != null ? state.profiles.find((item) => item.id === input.profileId) : undefined
   if (input.profileId != null && !source) return { ok: false, error: incompleteProfile(['saved profile']) }
   const entered = input.profile
+  const timingInput = entered
+    ? {
+        totalTimeSeconds: entered.totalTimeSeconds,
+        firstCrackSeconds: entered.firstCrackSeconds,
+        dropTemp: entered.dropTemp,
+      }
+    : source
   const facts: ProfileSnapshot = {
     name: blankToUndefined(entered?.name ?? source?.name),
     beansName: (entered?.beansName ?? source?.beansName ?? '').trim(),
@@ -1323,9 +1356,12 @@ function resolveProfile(
     dtr: entered?.dtr ?? source?.dtr ?? Number.NaN,
     weightLossPercent: entered?.weightLossPercent ?? source?.weightLossPercent ?? Number.NaN,
     notes: blankToUndefined(entered?.notes ?? source?.notes),
+    ...copyTiming(timingInput),
   }
   const missing = missingProfileFields(facts)
   if ((!entered && !source) || missing.length) return { ok: false, error: incompleteProfile(missing) }
+  const timingProblem = timingError(timingInput)
+  if (timingProblem) return { ok: false, error: { type: 'validation', message: timingProblem } }
   const createLibrary = input.saveAsNew === true || (input.profileId == null && input.saveAsNew !== false)
   return {
     ok: true,
@@ -1404,4 +1440,79 @@ function isValidDate(value: string): boolean {
 function blankToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
+}
+
+function timingError(input: {
+  totalTimeSeconds?: number
+  firstCrackSeconds?: number
+  dropTemp?: number
+} | undefined): string | null {
+  if (!input) return null
+  if (input.totalTimeSeconds != null && (!isFiniteNumber(input.totalTimeSeconds) || input.totalTimeSeconds < 0)) {
+    return 'Total time must be mm:ss.'
+  }
+  if (input.firstCrackSeconds != null && (!isFiniteNumber(input.firstCrackSeconds) || input.firstCrackSeconds < 0)) {
+    return 'First-crack time must be mm:ss.'
+  }
+  if (
+    isFiniteNumber(input.totalTimeSeconds) &&
+    isFiniteNumber(input.firstCrackSeconds) &&
+    input.firstCrackSeconds > input.totalTimeSeconds
+  ) {
+    return 'First-crack time cannot be later than the total roast time.'
+  }
+  if (input.dropTemp != null && (!isFiniteNumber(input.dropTemp) || input.dropTemp <= 0)) {
+    return 'Drop temperature must be a positive number.'
+  }
+  return null
+}
+
+function copyTiming(source: {
+  totalTimeSeconds?: number
+  firstCrackSeconds?: number
+  dropTemp?: number
+} | undefined): Pick<ProfileSnapshot, 'totalTimeSeconds' | 'firstCrackSeconds' | 'dropTemp'> {
+  if (!source) return {}
+  const timing: Pick<ProfileSnapshot, 'totalTimeSeconds' | 'firstCrackSeconds' | 'dropTemp'> = {}
+  if (isFiniteNumber(source.totalTimeSeconds) && source.totalTimeSeconds >= 0) {
+    timing.totalTimeSeconds = Math.round(source.totalTimeSeconds)
+  }
+  if (isFiniteNumber(source.firstCrackSeconds) && source.firstCrackSeconds >= 0) {
+    timing.firstCrackSeconds = Math.round(source.firstCrackSeconds)
+  }
+  if (isFiniteNumber(source.dropTemp) && source.dropTemp > 0) timing.dropTemp = source.dropTemp
+  return timing
+}
+
+function writeTiming(
+  target: ProfileSnapshot,
+  timing: { totalTimeSeconds?: number; firstCrackSeconds?: number; dropTemp?: number },
+  patch: Partial<ProfileSnapshot>,
+) {
+  if ('totalTimeSeconds' in patch) {
+    if (isFiniteNumber(timing.totalTimeSeconds)) target.totalTimeSeconds = Math.round(timing.totalTimeSeconds)
+    else delete target.totalTimeSeconds
+  }
+  if ('firstCrackSeconds' in patch) {
+    if (isFiniteNumber(timing.firstCrackSeconds)) target.firstCrackSeconds = Math.round(timing.firstCrackSeconds)
+    else delete target.firstCrackSeconds
+  }
+  if ('dropTemp' in patch) {
+    if (isFiniteNumber(timing.dropTemp) && timing.dropTemp > 0) target.dropTemp = timing.dropTemp
+    else delete target.dropTemp
+  }
+}
+
+function replaceProfileFacts(profile: RoastProfile, facts: ProfileSnapshot, recordedAt: string): RoastProfile {
+  const next: RoastProfile = {
+    ...profile,
+    ...facts,
+    id: profile.id,
+    createdAt: profile.createdAt ?? recordedAt,
+    updatedAt: recordedAt,
+  }
+  if (facts.totalTimeSeconds == null) delete next.totalTimeSeconds
+  if (facts.firstCrackSeconds == null) delete next.firstCrackSeconds
+  if (facts.dropTemp == null) delete next.dropTemp
+  return next
 }

@@ -26,6 +26,9 @@ export interface ProfileSnapshot {
   dtr: number
   weightLossPercent: number
   notes?: string
+  totalTimeSeconds?: number
+  firstCrackSeconds?: number
+  dropTemp?: number
 }
 
 export interface RoastProfile extends ProfileSnapshot {

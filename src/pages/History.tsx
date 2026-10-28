@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { chipFor, iconFor } from '../activityIcons.ts'
 import { Icon } from '../components/Icon.tsx'
-import { batchClassificationLabel, batchTrail, lotTrail } from '../domain/rules.ts'
+import { batchClassificationLabel, batchTrail, lotTrail, profileFacts, roastTimingText } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import { formatDate, formatWhen } from '../units.ts'
 
@@ -58,7 +58,7 @@ export function History() {
                   Batch #{batch.id}
                 </button>
                 {' · '}
-                {batchClassificationLabel(batch)} · loss {batch.weightLossPercent}%
+                {batchClassificationLabel(batch)} · loss {batch.weightLossPercent}% · {roastTimingText(profileFacts(state, batch))}
               </li>
             ))}
           </ul>

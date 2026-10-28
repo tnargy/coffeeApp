@@ -61,6 +61,24 @@ export function formatMoney(amount: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
 }
 
+export function formatTime(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(total / 60)
+  const secs = total % 60
+  return `${minutes}:${String(secs).padStart(2, '0')}`
+}
+
+export function parseTime(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 60
+  const match = /^(\d+):(\d{1,2})$/.exec(trimmed)
+  if (!match) return null
+  const seconds = Number(match[2])
+  if (seconds > 59) return null
+  return Number(match[1]) * 60 + seconds
+}
+
 export function formatWhen(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso

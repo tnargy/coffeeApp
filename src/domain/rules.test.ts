@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { APP_ROUTES } from '../routes.ts'
-import { GRAMS_PER_LB, GRAMS_PER_OZ, formatGrams, formatPounds, roundGrams } from '../units.ts'
+import { GRAMS_PER_LB, GRAMS_PER_OZ, formatGrams, formatPounds, formatTime, parseTime, roundGrams } from '../units.ts'
 import {
   addProfile,
   applyEntityUpdate,
@@ -10,11 +10,13 @@ import {
   dashboardSummary,
   editRecord,
   emptyState,
+  ensureProfileSnapshots,
   greenRemaining,
   isReserveLow,
   lotAllotment,
   personalCharged,
   pnl,
+  profileFacts,
   roastedUse,
   missingProfileFields,
   packBags,
@@ -969,5 +971,149 @@ describe('dashboard', () => {
     expect(summary.recentProfiles[0].profile?.beansName).toBe('Ethiopia')
     expect(summary.activity.some((event) => event.kind === 'roasted' && event.text.includes('Ethiopia'))).toBe(true)
     expect(summary.activity.some((event) => event.text.includes('Roasted'))).toBe(true)
+  })
+})
+
+describe('roast timing fields', () => {
+  it('parses and formats mm:ss', () => {
+    expect(parseTime('14:37')).toBe(14 * 60 + 37)
+    expect(parseTime('11:57')).toBe(11 * 60 + 57)
+    expect(formatTime(14 * 60 + 37)).toBe('14:37')
+    expect(formatTime(11 * 60 + 57)).toBe('11:57')
+    expect(parseTime('14')).toBe(14 * 60)
+    expect(parseTime('0:30')).toBe(30)
+    expect(parseTime('')).toBeNull()
+    expect(parseTime('14:60')).toBeNull()
+    expect(parseTime('nope')).toBeNull()
+    expect(parseTime('1:2:3')).toBeNull()
+  })
+
+  it('stores optional timing on the batch snapshot and shows mm:ss in history and activity', () => {
+    const result = recordRoast(lotState(2000), roastInput({
+      profile: {
+        ...profile,
+        totalTimeSeconds: 14 * 60 + 37,
+        firstCrackSeconds: 11 * 60 + 57,
+        dropTemp: 196,
+      },
+    }))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const snap = result.state.batches[0].profileSnapshot
+    expect(snap?.totalTimeSeconds).toBe(877)
+    expect(snap?.firstCrackSeconds).toBe(717)
+    expect(snap?.dropTemp).toBe(196)
+    expect(result.state.profiles[0].totalTimeSeconds).toBe(877)
+    expect(result.state.profiles[0].firstCrackSeconds).toBe(717)
+    expect(result.state.profiles[0].dropTemp).toBe(196)
+    const detail = batchTrail(result.state, result.state.batches[0].id).find((event) => event.kind === 'roasted')?.detail ?? ''
+    expect(detail).toContain('14:37')
+    expect(detail).toContain('11:57')
+    expect(detail).toContain('196°C')
+    expect(dashboardSummary(result.state).activity.some((event) => event.detail.includes('14:37') && event.detail.includes('11:57'))).toBe(true)
+  })
+
+  it('creates a batch when timing fields are omitted and shows an em dash', () => {
+    const result = recordRoast(lotState(2000), roastInput())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.batches).toHaveLength(1)
+    expect(result.state.batches[0].profileSnapshot).not.toHaveProperty('totalTimeSeconds')
+    expect(result.state.batches[0].profileSnapshot).not.toHaveProperty('firstCrackSeconds')
+    expect(result.state.batches[0].profileSnapshot).not.toHaveProperty('dropTemp')
+    const detail = batchTrail(result.state, result.state.batches[0].id).find((event) => event.kind === 'roasted')?.detail ?? ''
+    expect(detail).toContain('—')
+    expect(detail).not.toContain('14:37')
+    expect(dashboardSummary(result.state).activity.some((event) => event.kind === 'roasted' && event.detail.includes('—'))).toBe(true)
+  })
+
+  it('rejects first-crack time later than total time without creating a batch', () => {
+    const start = lotState(2000)
+    const result = recordRoast(start, roastInput({
+      profile: { ...profile, totalTimeSeconds: 600, firstCrackSeconds: 601 },
+    }))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.type).toBe('validation')
+    expect(result.error.message).toMatch(/first-crack/i)
+    expect(result.state.batches).toHaveLength(0)
+    expect(result.state.profiles).toHaveLength(0)
+    expect(greenRemaining(result.state)).toBe(2000)
+  })
+
+  it('allows first-crack time equal to total time and a first crack without a total', () => {
+    const equal = recordRoast(lotState(2000), roastInput({
+      profile: { ...profile, totalTimeSeconds: 600, firstCrackSeconds: 600 },
+    }))
+    expect(equal.ok).toBe(true)
+    const crackOnly = recordRoast(lotState(2000), roastInput({
+      profile: { ...profile, firstCrackSeconds: 500 },
+    }))
+    expect(crackOnly.ok).toBe(true)
+  })
+
+  it('rejects a non-positive drop temperature and a negative time', () => {
+    const drop = recordRoast(lotState(2000), roastInput({ profile: { ...profile, dropTemp: 0 } }))
+    expect(drop.ok).toBe(false)
+    if (drop.ok) return
+    expect(drop.state.batches).toHaveLength(0)
+    const negative = addProfile(emptyState(), { ...profile, totalTimeSeconds: -1 })
+    expect(negative.ok).toBe(false)
+    if (negative.ok) return
+    expect(negative.state.profiles).toHaveLength(0)
+  })
+
+  it('stores timing on a library profile and still loads records that omit the new fields', () => {
+    const saved = addProfile(emptyState(), {
+      ...profile,
+      totalTimeSeconds: 877,
+      firstCrackSeconds: 717,
+      dropTemp: 196,
+    })
+    expect(saved.ok).toBe(true)
+    if (!saved.ok) return
+    expect(saved.state.profiles[0].totalTimeSeconds).toBe(877)
+    expect(saved.state.batches).toHaveLength(0)
+    const rejected = addProfile(emptyState(), { ...profile, totalTimeSeconds: 100, firstCrackSeconds: 200 })
+    expect(rejected.ok).toBe(false)
+
+    const legacy = lotState(2000)
+    legacy.profiles.push({
+      id: 1,
+      beansName: 'Old',
+      chargeTemp: 380,
+      batchSize: 500,
+      dtr: 18,
+      weightLossPercent: 15,
+    })
+    legacy.batches.push({
+      id: 1,
+      greenLotId: 1,
+      profileId: 1,
+      greenWeightCharged: 500,
+      roastedYield: 400,
+      weightLossPercent: 20,
+      classification: 'for-sale',
+      roastDate: '2026-03-01T00:00:00.000Z',
+      roastedWeightRemaining: 400,
+      status: 'ready-to-bag',
+    })
+    const ready = ensureProfileSnapshots(legacy)
+    expect(ready.batches[0].profileSnapshot?.beansName).toBe('Old')
+    expect(ready.batches[0].profileSnapshot).not.toHaveProperty('totalTimeSeconds')
+    expect(ready.batches[0].profileSnapshot).not.toHaveProperty('firstCrackSeconds')
+    expect(ready.batches[0].profileSnapshot).not.toHaveProperty('dropTemp')
+    expect(profileFacts(ready, ready.batches[0])?.dropTemp).toBeUndefined()
+    expect(batchTrail(ready, 1).find((event) => event.kind === 'roasted')?.detail).toContain('—')
+    const edited = applyEntityUpdate(ready, {
+      entity: 'profile',
+      id: 1,
+      patch: { totalTimeSeconds: 900, dropTemp: 200 },
+    })
+    expect(edited.ok).toBe(true)
+    if (!edited.ok) return
+    expect(edited.state.profiles[0].totalTimeSeconds).toBe(900)
+    expect(edited.state.profiles[0].dropTemp).toBe(200)
+    expect(edited.state.batches[0].profileSnapshot).not.toHaveProperty('totalTimeSeconds')
   })
 })

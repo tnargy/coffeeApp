@@ -107,6 +107,71 @@ describe('persistence', () => {
     expect(migrated && 'restStartTime' in migrated).toBe(false)
   })
 
+  it('persists optional roast timing and still loads records that omit it', async () => {
+    await ensureReady()
+    const before = await receiveTestLot()
+    await db.profiles.add({
+      id: 9,
+      beansName: 'Legacy',
+      chargeTemp: 370,
+      batchSize: 400,
+      dtr: 18,
+      weightLossPercent: 14,
+    })
+    await db.batches.add({
+      id: 9,
+      greenLotId: before.lots[0].id,
+      profileId: 9,
+      greenWeightCharged: 100,
+      roastedYield: 80,
+      weightLossPercent: 20,
+      classification: 'internal',
+      roastDate: '2026-05-01T00:00:00.000Z',
+      roastedWeightRemaining: 80,
+      status: 'ready-to-bag',
+    })
+
+    const loaded = await loadState()
+    const legacyProfile = loaded.profiles.find((profile) => profile.beansName === 'Legacy')
+    const legacyBatch = loaded.batches.find((batch) => batch.id === 9)
+    expect(legacyProfile?.beansName).toBe('Legacy')
+    expect(legacyProfile?.totalTimeSeconds).toBeUndefined()
+    expect(legacyBatch?.profileSnapshot?.beansName).toBe('Legacy')
+    expect(legacyBatch?.profileSnapshot?.totalTimeSeconds).toBeUndefined()
+    expect(legacyBatch?.profileSnapshot?.firstCrackSeconds).toBeUndefined()
+    expect(legacyBatch?.profileSnapshot?.dropTemp).toBeUndefined()
+
+    const roasted = await logRoast({
+      greenLotId: before.lots[0].id,
+      greenWeightCharged: 200,
+      roastedYield: 170,
+      classification: 'for-sale',
+      roastDate: '2026-06-02T00:00:00.000Z',
+      profile: {
+        beansName: 'Ethiopia',
+        chargeTemp: 390,
+        batchSize: 200,
+        dtr: 20,
+        weightLossPercent: 15,
+        totalTimeSeconds: 877,
+        firstCrackSeconds: 717,
+        dropTemp: 196,
+      },
+    })
+    expect(roasted.ok).toBe(true)
+    const state = await loadState()
+    const saved = state.profiles.find((profile) => profile.beansName === 'Ethiopia')
+    const snap = state.batches.find((batch) => batch.profileSnapshot?.beansName === 'Ethiopia')?.profileSnapshot
+    expect(saved?.totalTimeSeconds).toBe(877)
+    expect(saved?.firstCrackSeconds).toBe(717)
+    expect(saved?.dropTemp).toBe(196)
+    expect(snap?.totalTimeSeconds).toBe(877)
+    expect(snap?.firstCrackSeconds).toBe(717)
+    expect(snap?.dropTemp).toBe(196)
+    expect(state.profiles.find((profile) => profile.beansName === 'Legacy')?.totalTimeSeconds).toBeUndefined()
+    expect(state.batches.find((batch) => batch.id === 9)?.greenWeightCharged).toBe(100)
+  })
+
   it('does not persist a roast that exceeds green stock', async () => {
     await ensureReady()
     const before = await receiveTestLot()

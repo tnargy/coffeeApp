@@ -1,26 +1,32 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ErrorBanner, Field, SuccessBanner } from '../components/Field.tsx'
 import { logRoast } from '../data/repository.ts'
 import { useAppState } from '../hooks/useAppState.ts'
-import { currentLocalInput, formatGrams, fromLocalInput, toGrams } from '../units.ts'
+import { currentLocalInput, formatGrams, formatTime, fromLocalInput, parseTime, toGrams } from '../units.ts'
+import { roastFormPrefill } from './roastPrefill.ts'
 
 export function LogRoast() {
   const state = useAppState()
+  const [searchParams] = useSearchParams()
+  const [prefill] = useState(() => roastFormPrefill(searchParams))
   const [lotId, setLotId] = useState('')
-  const [green, setGreen] = useState('')
+  const [green, setGreen] = useState(prefill.green ?? '')
   const [yieldAmount, setYieldAmount] = useState('')
   const [personalYield, setPersonalYield] = useState('0')
   const [roastDate, setRoastDate] = useState(currentLocalInput)
   const [profileId, setProfileId] = useState('')
   const [name, setName] = useState('')
-  const [beansName, setBeansName] = useState('')
-  const [chargeTemp, setChargeTemp] = useState('')
+  const [beansName, setBeansName] = useState(prefill.beansName ?? '')
+  const [chargeTemp, setChargeTemp] = useState(prefill.chargeTemp ?? '')
   const [batchSize, setBatchSize] = useState('')
-  const [dtr, setDtr] = useState('')
+  const [dtr, setDtr] = useState(prefill.dtr ?? '')
   const [weightLoss, setWeightLoss] = useState('')
   const [lossTouched, setLossTouched] = useState(false)
+  const [totalTime, setTotalTime] = useState(prefill.totalTime ?? '')
+  const [firstCrack, setFirstCrack] = useState(prefill.firstCrack ?? '')
+  const [dropTemp, setDropTemp] = useState(prefill.dropTemp ?? '')
   const [notes, setNotes] = useState('')
   const [saveAsNew, setSaveAsNew] = useState(true)
   const [updateExisting, setUpdateExisting] = useState(false)
@@ -45,6 +51,21 @@ export function LogRoast() {
       return
     }
     const lossValue = lossTouched ? weightLoss : weightLoss || suggestedLoss
+    const totalTimeSeconds = readTime(totalTime)
+    if (totalTimeSeconds === null) {
+      setError('Total time must be mm:ss.')
+      return
+    }
+    const firstCrackSeconds = readTime(firstCrack)
+    if (firstCrackSeconds === null) {
+      setError('First-crack time must be mm:ss.')
+      return
+    }
+    const drop = readDropTemp(dropTemp)
+    if (drop === null) {
+      setError('Drop temperature must be a positive number.')
+      return
+    }
     const result = await logRoast({
       greenLotId: Number(lotId),
       greenWeightCharged: toGrams(Number(green), 'g'),
@@ -63,6 +84,9 @@ export function LogRoast() {
         dtr: Number(dtr),
         weightLossPercent: Number(lossValue),
         notes,
+        totalTimeSeconds,
+        firstCrackSeconds,
+        dropTemp: drop,
       },
     })
     if (!result.ok) {
@@ -134,6 +158,9 @@ export function LogRoast() {
               setDtr(String(selected.dtr))
               setWeightLoss(String(selected.weightLossPercent))
               setLossTouched(true)
+              setTotalTime(selected.totalTimeSeconds == null ? '' : formatTime(selected.totalTimeSeconds))
+              setFirstCrack(selected.firstCrackSeconds == null ? '' : formatTime(selected.firstCrackSeconds))
+              setDropTemp(selected.dropTemp == null ? '' : String(selected.dropTemp))
               setNotes(selected.notes ?? '')
               setSaveAsNew(false)
               setUpdateExisting(false)
@@ -174,6 +201,15 @@ export function LogRoast() {
             required
           />
         </Field>
+        <Field label="Total time" hint="Optional. mm:ss">
+          <input value={totalTime} onChange={(event) => setTotalTime(event.target.value)} inputMode="numeric" placeholder="14:37" />
+        </Field>
+        <Field label="First crack" hint="Optional. mm:ss from charge">
+          <input value={firstCrack} onChange={(event) => setFirstCrack(event.target.value)} inputMode="numeric" placeholder="11:57" />
+        </Field>
+        <Field label="Drop temp (°C)" hint="Optional">
+          <input value={dropTemp} onChange={(event) => setDropTemp(event.target.value)} inputMode="decimal" />
+        </Field>
         <Field label="Profile notes">
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
         </Field>
@@ -197,4 +233,16 @@ export function LogRoast() {
       </div>
     </form>
   )
+}
+
+function readTime(value: string): number | undefined | null {
+  if (value.trim() === '') return undefined
+  return parseTime(value)
+}
+
+function readDropTemp(value: string): number | undefined | null {
+  if (value.trim() === '') return undefined
+  const drop = Number(value)
+  if (!Number.isFinite(drop) || drop <= 0) return null
+  return drop
 }

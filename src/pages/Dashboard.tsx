@@ -5,7 +5,7 @@ import { downloadBackup } from '../backup.ts'
 import { Icon } from '../components/Icon.tsx'
 import type { IconName } from '../components/Icon.tsx'
 import { crud } from '../data/repository.ts'
-import { batchClassificationLabel, dashboardSummary, isVoided, lotAllotment, pnl, profileLabel, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
+import { batchClassificationLabel, dashboardSummary, isVoided, lotAllotment, pnl, profileLabel, roastTimingText, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import { statusLabel } from '../labels.ts'
 import { QUICK_ACTIONS } from '../routes.ts'
@@ -233,7 +233,7 @@ export function Dashboard() {
                 {' · '}
                 {profile ? profileLabel(profile) : 'Profile missing'}
                 {isVoided(batch) ? ' · voided' : ''} · charge {profile?.chargeTemp ?? '—'} · DTR {profile?.dtr ?? '—'}% · loss{' '}
-                {batch.weightLossPercent}% · {batchClassificationLabel(batch)} · {formatWhen(batch.roastDate)}
+                {batch.weightLossPercent}% · {roastTimingText(profile)} · {batchClassificationLabel(batch)} · {formatWhen(batch.roastDate)}
               </li>
             ))}
           </ul>

@@ -229,6 +229,10 @@ export function lotReserveGrams(lot: GreenLot): number {
   return lot.personalReserveGrams ?? 0
 }
 
+export function isDepletedLot(lot: { weightRemaining: number }): boolean {
+  return lot.weightRemaining <= 0
+}
+
 export function personalCharged(state: AppState, lotId: number): number {
   return roundGrams(
     state.batches

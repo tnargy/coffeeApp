@@ -1,3 +1,5 @@
+export const INVENTORY_PATH = '/inventory'
+
 export const APP_ROUTES = [
   { path: '/', label: 'Dashboard' },
   { path: '/receive', label: 'Receive' },

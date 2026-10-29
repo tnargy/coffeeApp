@@ -5,10 +5,11 @@ import { downloadBackup } from '../backup.ts'
 import { Icon } from '../components/Icon.tsx'
 import type { IconName } from '../components/Icon.tsx'
 import { crud } from '../data/repository.ts'
-import { batchClassificationLabel, dashboardSummary, isVoided, lotAllotment, pnl, profileLabel, roastTimingText, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
+import { batchClassificationLabel, dashboardSummary, isDepletedLot, isVoided, lotAllotment, pnl, profileLabel, roastTimingText, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import { statusLabel } from '../labels.ts'
-import { QUICK_ACTIONS } from '../routes.ts'
+import { showActivityAndActions } from './dashboardCards.ts'
+import { INVENTORY_PATH, QUICK_ACTIONS } from '../routes.ts'
 import type { AppState, GreenLot } from '../types.ts'
 import { GRAMS_PER_LB, formatGrams, formatMoney, formatPounds, formatWhen, toGrams } from '../units.ts'
 
@@ -20,6 +21,7 @@ export function Dashboard() {
   const unpaid = unpaidBalance(state)
   const roasted = roastedUse(state)
   const allotments = state.lots.map((lot) => ({ lot, ...lotAllotment(state, lot) }))
+  const listedLots = allotments.filter(({ lot }) => !isDepletedLot(lot))
   const unmet = allotments.reduce((sum, item) => sum + item.unmet, 0)
   const covered = allotments.filter((item) => item.covered).length
   const margin =
@@ -78,11 +80,16 @@ export function Dashboard() {
               </span>
               Green bean inventory
             </h2>
-            <Link to="/history">View all</Link>
+            <Link to={INVENTORY_PATH}>View all</Link>
           </div>
           {state.lots.length === 0 ? <p className="muted">No lots yet.</p> : null}
+          {state.lots.length > 0 && listedLots.length === 0 ? (
+            <p className="muted">
+              Finished lots are on <Link to={INVENTORY_PATH}>Inventory</Link>.
+            </p>
+          ) : null}
           <ul className="lots">
-            {allotments.map(({ lot, reserve, unmet: lotUnmet, fairGreen, covered: lotCovered }) => {
+            {listedLots.map(({ lot, reserve, unmet: lotUnmet, fairGreen, covered: lotCovered }) => {
               const pct = lot.weightReceived > 0 ? Math.min(100, (lot.weightRemaining / lot.weightReceived) * 100) : 0
               return (
                 <li key={lot.id}>
@@ -125,32 +132,34 @@ export function Dashboard() {
             </div>
           ) : null}
         </section>
-        <section className="card">
-          <div className="card-head">
-            <h2>
-              <span className="icon-chip bean sm" aria-hidden="true">
-                <Icon name="clock" />
-              </span>
-              Recent activity
-            </h2>
-            <Link to="/history">View all</Link>
-          </div>
-          {summary.activity.length === 0 ? <p className="muted">No activity yet.</p> : null}
-          <ul className="feed">
-            {summary.activity.map((event) => (
-              <li key={event.id} className="feed-item">
-                <span className={`icon-chip ${chipFor(event.kind)}`} aria-hidden="true">
-                  <Icon name={iconFor(event.kind)} />
+        {showActivityAndActions ? (
+          <section className="card">
+            <div className="card-head">
+              <h2>
+                <span className="icon-chip bean sm" aria-hidden="true">
+                  <Icon name="clock" />
                 </span>
-                <div>
-                  <strong>{event.text}</strong>
-                  <small>{event.detail}</small>
-                  <time dateTime={event.at}>{formatWhen(event.at)}</time>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+                Recent activity
+              </h2>
+              <Link to="/history">View all</Link>
+            </div>
+            {summary.activity.length === 0 ? <p className="muted">No activity yet.</p> : null}
+            <ul className="feed">
+              {summary.activity.map((event) => (
+                <li key={event.id} className="feed-item">
+                  <span className={`icon-chip ${chipFor(event.kind)}`} aria-hidden="true">
+                    <Icon name={iconFor(event.kind)} />
+                  </span>
+                  <div>
+                    <strong>{event.text}</strong>
+                    <small>{event.detail}</small>
+                    <time dateTime={event.at}>{formatWhen(event.at)}</time>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <aside className="dash-rail">
           <section className={unmet > 0 ? 'card alert-card low' : 'card alert-card'} role="status">
             <h2>
@@ -165,30 +174,32 @@ export function Dashboard() {
             </p>
             <a href="#green-inventory">View inventory</a>
           </section>
-          <section className="card">
-            <h2>
-              <span className="icon-chip bean sm" aria-hidden="true">
-                <Icon name="bolt" />
-              </span>
-              Quick actions
-            </h2>
-            <div className="quick-list">
-              {QUICK_ACTIONS.map((action) => (
-                <Link key={action.path} className="quick-action" to={action.path}>
-                  <span className="icon-chip bean" aria-hidden="true">
-                    <Icon name={actionIcon(action.path)} />
-                  </span>
-                  <span>
-                    <strong>{action.label}</strong>
-                    <small>{action.detail}</small>
-                  </span>
-                  <span className="chevron" aria-hidden="true">
-                    ›
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
+          {showActivityAndActions ? (
+            <section className="card">
+              <h2>
+                <span className="icon-chip bean sm" aria-hidden="true">
+                  <Icon name="bolt" />
+                </span>
+                Quick actions
+              </h2>
+              <div className="quick-list">
+                {QUICK_ACTIONS.map((action) => (
+                  <Link key={action.path} className="quick-action" to={action.path}>
+                    <span className="icon-chip bean" aria-hidden="true">
+                      <Icon name={actionIcon(action.path)} />
+                    </span>
+                    <span>
+                      <strong>{action.label}</strong>
+                      <small>{action.detail}</small>
+                    </span>
+                    <span className="chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </aside>
         <section className="card pnl dash-pnl">
           <div className="card-head">

@@ -1,7 +1,9 @@
 import { Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout.tsx'
+import { INVENTORY_PATH } from './routes.ts'
 import { Dashboard } from './pages/Dashboard.tsx'
 import { History } from './pages/History.tsx'
+import { Inventory } from './pages/Inventory.tsx'
 import { LogRoast } from './pages/LogRoast.tsx'
 import { PackBags } from './pages/PackBags.tsx'
 import { Profiles } from './pages/Profiles.tsx'
@@ -15,6 +17,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path={INVENTORY_PATH} element={<Inventory />} />
         <Route path="/receive" element={<ReceiveLot />} />
         <Route path="/roast" element={<LogRoast />} />
         <Route path="/profiles" element={<Profiles />} />

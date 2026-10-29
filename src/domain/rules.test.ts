@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { APP_ROUTES } from '../routes.ts'
+import { optionalDashboardHeadings, showActivityAndActions } from '../pages/dashboardCards.ts'
+import { APP_ROUTES, INVENTORY_PATH, QUICK_ACTIONS } from '../routes.ts'
 import { GRAMS_PER_LB, GRAMS_PER_OZ, formatGrams, formatPounds, formatTime, parseTime, roundGrams } from '../units.ts'
 import {
   addProfile,
@@ -12,6 +13,7 @@ import {
   emptyState,
   ensureProfileSnapshots,
   greenRemaining,
+  isDepletedLot,
   isReserveLow,
   lotAllotment,
   personalCharged,
@@ -76,6 +78,47 @@ function forSaleRoast(roasted = 1200): AppState {
   if (!received.ok) throw new Error('setup roast failed')
   return received.state
 }
+
+describe('depleted lots', () => {
+  it('treats zero and negative remaining as depleted and a positive remainder as not', () => {
+    expect(isDepletedLot({ weightRemaining: 0 })).toBe(true)
+    expect(isDepletedLot({ weightRemaining: -1 })).toBe(true)
+    expect(isDepletedLot({ weightRemaining: 1 })).toBe(false)
+  })
+
+  it('keeps a depleted lot in the green total and allotment', () => {
+    const state = emptyState()
+    state.lots.push(
+      {
+        id: 1,
+        name: 'Finished',
+        origin: 'Ethiopia',
+        weightReceived: 1000,
+        weightRemaining: 0,
+        costPerKg: 10,
+        totalCost: 10,
+        dateReceived: '2026-01-01T00:00:00.000Z',
+        personalReserveGrams: 200,
+      },
+      {
+        id: 2,
+        name: 'Open',
+        origin: 'Kenya',
+        weightReceived: 500,
+        weightRemaining: 500,
+        costPerKg: 10,
+        totalCost: 5,
+        dateReceived: '2026-01-02T00:00:00.000Z',
+      },
+    )
+    const listed = state.lots.filter((lot) => !isDepletedLot(lot))
+    const unmet = state.lots.reduce((sum, lot) => sum + lotAllotment(state, lot).unmet, 0)
+    expect(greenRemaining(state)).toBe(500)
+    expect(listed.map((lot) => lot.name)).toEqual(['Open'])
+    expect(unmet).toBe(200)
+    expect(lotAllotment(state, state.lots[0]).unmet).toBe(200)
+  })
+})
 
 describe('inventory', () => {
   it('records a new green lot and increases stock', () => {
@@ -712,6 +755,16 @@ describe('sales', () => {
   it('exposes only internal routes', () => {
     const paths = APP_ROUTES.map((route) => route.path)
     expect(paths).not.toEqual(expect.arrayContaining(['/shop', '/store', '/checkout', '/catalog']))
+    expect(paths).not.toContain(INVENTORY_PATH)
+    expect(INVENTORY_PATH).toBe('/inventory')
+    expect(paths).toEqual(expect.arrayContaining(['/roast', '/pack', '/sale', '/history']))
+  })
+
+  it('keeps quick actions and hides their dashboard headings until enabled', () => {
+    expect(QUICK_ACTIONS.map((action) => action.label)).toEqual(['Log Roast', 'Pack Bags', 'Record Sale'])
+    expect(showActivityAndActions).toBe(false)
+    expect(optionalDashboardHeadings(false)).toEqual([])
+    expect(optionalDashboardHeadings(true)).toEqual(['Recent activity', 'Quick actions'])
   })
 })
 

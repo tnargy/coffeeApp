@@ -306,8 +306,9 @@ export function Records() {
                 <p>
                   {formatMoney(sale.saleAmount)} · {sale.baggedUnitIds.length} bag
                   {sale.baggedUnitIds.length === 1 ? '' : 's'} · {formatDate(sale.date)}
-                  {sale.paid === false ? ' · unpaid' : ''}
+                  {sale.paid === false ? ' · unpaid' : ' · paid'}
                 </p>
+                {sale.notes?.trim() ? <p>{sale.notes.trim()}</p> : null}
                 {isVoided(sale) ? <p className="muted">{voidMarker(sale).trim()}</p> : null}
                 <RecordActions
                   label={label}

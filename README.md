@@ -11,6 +11,15 @@ A lightweight, local-first web application built with React, TypeScript, Vite, a
 - **Backup & Restore**: Full JSON export and import capabilities.
 - **Local-First**: Powered by IndexedDB (Dexie) with zero server dependencies required for core usage.
 
+Weight moves from a green lot, to a roast split into personal and for-sale pools, to bags, to a sale. Voids put weight back and keep the record. See [docs/flows.md](docs/flows.md) for the flowcharts.
+
+```mermaid
+flowchart LR
+  receive["Receive"] --> roast["Log roast"]
+  roast --> pack["Pack bags"]
+  pack --> sale["Record sale"]
+```
+
 ## Tech Stack
 
 - **Frontend**: React 19, React Router 7, TypeScript, Vite

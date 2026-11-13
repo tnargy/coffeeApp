@@ -21,14 +21,18 @@ import { currentStandardPrice, saleStandardPrice } from './pricing.ts'
 import { roundGrams } from '../units.ts'
 
 const fixtureJson = JSON.stringify(fixtureDoc)
-const fixture = fixtureDoc as AppState & {
+const fixture = fixtureDoc as unknown as AppState & {
   syntheticCases: Record<string, AppState>
   formatVersion: number
 }
 
+function asAppState(state: AppState): AppState {
+  return { ...state, customers: state.customers ?? [] }
+}
+
 function exportState(): AppState {
   const { lots, profiles, batches, bags, sales, audit, settings } = fixture
-  return { lots, profiles, batches, bags, sales, audit, settings }
+  return { lots, profiles, batches, bags, sales, customers: [], audit, settings }
 }
 
 const profile: ProfileInput = {
@@ -166,7 +170,7 @@ describe('nov 10 export margins', () => {
 
 describe('synthetic margin cases', () => {
   it('leaves a voided sale out of revenue and counts its bag as still for sale', () => {
-    const state = fixture.syntheticCases.voidedSale
+    const state = asAppState(fixture.syntheticCases.voidedSale)
     expect(pnl(state).revenue).toBe(0)
     expect(monthlySales(state)).toEqual([])
     expect(lotBreakEvens(state)[0].bags).toBe(0)
@@ -174,7 +178,7 @@ describe('synthetic margin cases', () => {
   })
 
   it('records a below-standard sale as shortfall, not overpay', () => {
-    const state = fixture.syntheticCases.belowStandardSale
+    const state = asAppState(fixture.syntheticCases.belowStandardSale)
     const row = lotBreakEvens(state)[0]
     expect(row.standardRevenue).toBe(12)
     expect(row.shortfall).toBe(2)
@@ -184,20 +188,20 @@ describe('synthetic margin cases', () => {
   })
 
   it('counts an available for-sale bag in forward margin and not in cost of goods', () => {
-    const state = fixture.syntheticCases.availableForSaleBag
+    const state = asAppState(fixture.syntheticCases.availableForSaleBag)
     expect(pnl(state).cogs).toBe(0)
     expect(lotBreakEvens(state)[0].bags).toBe(0)
     expect(displayBags(lotForward(state, state.lots[0]).forwardBags)).toBe('1.0')
   })
 
   it('costs unpacked personal coffee apart from the personal-yield split', () => {
-    const state = fixture.syntheticCases.unpackedPersonalRemaining
+    const state = asAppState(fixture.syntheticCases.unpackedPersonalRemaining)
     expect(personalStockCost(state)).toBeGreaterThan(personalYieldCost(state))
     expect(lotForward(state, state.lots[0]).forwardRoasted).toBe(0)
   })
 
   it('splits a combined bag across lots in proportion to its sources', () => {
-    const state = fixture.syntheticCases.crossLotCombinedBag
+    const state = asAppState(fixture.syntheticCases.crossLotCombinedBag)
     const [left, right] = lotMoney(state)
     expect(left.bags).toBeGreaterThan(right.bags)
     expect(left.standardRevenue + right.standardRevenue).toBe(12)

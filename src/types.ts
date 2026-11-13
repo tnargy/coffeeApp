@@ -141,6 +141,7 @@ export interface Settings {
    * A backup from before customers (format 2 and older) does not carry it, so import runs the link.
    */
   customersLinkedAt?: string
+  /**
    * Price used for future sales, break-even, and forward margin.
    * Absent means $12. Past sales keep `standardPriceAtSale`.
    */

@@ -116,6 +116,7 @@ Record Sale MUST offer a customer picker. Each existing customer's option label 
 - **WHEN** the operator types that name as a new customer, in a different case
 - **THEN** the sale uses the existing customer
 - **AND** no second customer is created
+
 ### Requirement: Standard price stored at sale time
 Settings MUST include an optional standard bag price. When it is missing, the price is $12. The settings page MUST let the operator change it, and the price MUST be greater than zero. `updateSettings` MUST accept that field. Recording a sale MUST store `standardPriceAtSale` from the current standard price. Later edits MUST NOT change that stored price. A sale with no stored price uses $12. Changing the setting affects later sales, break-even, and forward margin only. Past standard revenue, overpay, shortfall, and monthly history MUST NOT be recomputed. After a price change, bags sold plus bags still to break even need not equal break-even bags.
 

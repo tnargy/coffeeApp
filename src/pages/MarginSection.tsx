@@ -13,6 +13,7 @@ import {
   type LotBreakEven,
 } from '../domain/margin.ts'
 import { currentStandardPrice } from '../domain/pricing.ts'
+import { isDepletedLot } from '../domain/rules.ts'
 import type { AppState, GreenLot } from '../types.ts'
 import { GRAMS_PER_LB, formatMoney, toGrams } from '../units.ts'
 
@@ -73,16 +74,32 @@ export function LotMarginSection({ state }: { state: AppState }) {
   const rows = lotBreakEvens(state)
   const trend = new Map(costTrend(state).map((row) => [row.lotId, row]))
   const lots = new Map(state.lots.map((lot) => [lot.id, lot]))
+  const [showFinished, setShowFinished] = useState(false)
+  const finishedCount = rows.filter((row) => {
+    const lot = lots.get(row.lotId)
+    return lot != null && isDepletedLot(lot)
+  }).length
+  const shownRows = showFinished
+    ? rows
+    : rows.filter((row) => {
+        const lot = lots.get(row.lotId)
+        return lot == null || !isDepletedLot(lot)
+      })
   return (
     <section className="card" id="lot-margin">
       <div className="card-head">
         <h2>Lot margin</h2>
-        <span className="muted">Every lot, including finished ones</span>
+        <span className="muted">{showFinished ? 'Every lot, including finished ones' : 'Active lots — finished lots hidden'}</span>
       </div>
       <p className="muted">
         Break-even uses the standard price of {formatMoney(standard)} a bag. Forward margin is what is left to sell
         after the lot reserve, at that same price. Bean cost only.
       </p>
+      {finishedCount > 0 ? (
+        <button type="button" className="secondary" onClick={() => setShowFinished((value) => !value)}>
+          {showFinished ? 'Hide finished lots' : `Show finished lots (${finishedCount})`}
+        </button>
+      ) : null}
       <label className="field what-if-price">
         <span>What-if bag price</span>
         <input
@@ -97,7 +114,10 @@ export function LotMarginSection({ state }: { state: AppState }) {
         </small>
       </label>
       {rows.length === 0 ? <p className="muted">No lots yet.</p> : null}
-      {rows.length > 0 ? (
+      {rows.length > 0 && shownRows.length === 0 ? (
+        <p className="muted">No active lots — show finished lots to see them.</p>
+      ) : null}
+      {shownRows.length > 0 ? (
         <div className="table-wrap">
           <table className="data-table lot-margin">
             <thead>
@@ -116,7 +136,7 @@ export function LotMarginSection({ state }: { state: AppState }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {shownRows.map((row) => {
                 const lot = lots.get(row.lotId)
                 if (!lot) return null
                 const flag = trend.get(row.lotId)

@@ -5,10 +5,9 @@ import { downloadBackup } from '../backup.ts'
 import { Icon } from '../components/Icon.tsx'
 import type { IconName } from '../components/Icon.tsx'
 import { crud } from '../data/repository.ts'
-import { batchClassificationLabel, dashboardSummary, isDepletedLot, isVoided, lotAllotment, pnl, profileLabel, roastTimingText, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
+import { dashboardSummary, isDepletedLot, lotAllotment, pnl, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
 import { LotMarginSection, PnlExtras } from './MarginSection.tsx'
 import { useAppState } from '../hooks/useAppState.ts'
-import { statusLabel } from '../labels.ts'
 import { showActivityAndActions } from './dashboardCards.ts'
 import { INVENTORY_PATH, QUICK_ACTIONS } from '../routes.ts'
 import type { AppState, GreenLot } from '../types.ts'
@@ -236,37 +235,6 @@ export function Dashboard() {
         </section>
       </div>
       <LotMarginSection state={state} />
-      <div className="dash-secondary">
-        <section className="card">
-          <h2>Recent profiles</h2>
-          {summary.recentProfiles.length === 0 ? <p className="muted">No roasts yet.</p> : null}
-          <ul className="plain">
-            {summary.recentProfiles.map(({ batch, profile }) => (
-              <li key={batch.id}>
-                <Link to={`/history?batch=${batch.id}`}>Batch #{batch.id}</Link>
-                {' · '}
-                {profile ? profileLabel(profile) : 'Profile missing'}
-                {isVoided(batch) ? ' · voided' : ''} · charge {profile?.chargeTemp ?? '—'} · DTR {profile?.dtr ?? '—'}% · loss{' '}
-                {batch.weightLossPercent}% · {roastTimingText(profile)} · {batchClassificationLabel(batch)} · {formatWhen(batch.roastDate)}
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="card">
-          <h2>Bagged and sold</h2>
-          {summary.trail.length === 0 ? <p className="muted">No bagging or sales recorded yet.</p> : null}
-          <ul className="plain">
-            {summary.trail.map((item) => (
-              <li key={item.batch.id}>
-                <Link to={`/history?batch=${item.batch.id}`}>Batch #{item.batch.id}</Link>
-                {' · '}
-                {batchClassificationLabel(item.batch)} · {statusLabel(item.batch.status)} · {item.bagged} bagged · {item.sold} sold
-                {isVoided(item.batch) ? ' · voided' : ''}
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
       <p className="muted">
         Roasted batches on hand: {state.batches.filter((batch) => withDerivedStatus(batch).roastedWeightRemaining > 0).length}
       </p>

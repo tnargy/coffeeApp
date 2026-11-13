@@ -89,6 +89,12 @@ export interface Sale {
   date: string
   notes?: string
   paid?: boolean
+  /**
+   * Standard bag price in effect when the sale was recorded.
+   * Absent on sales from before this field existed; that means $12.
+   * Later edits and settings changes do not rewrite it.
+   */
+  standardPriceAtSale?: number
   voidedAt?: string
   voidReason?: string
 }
@@ -116,6 +122,11 @@ export interface Settings {
   personalUseReserveTargetGrams: number
   defaultBagSizeOz: number
   theme?: Theme
+  /**
+   * Price used for future sales, break-even, and forward margin.
+   * Absent means $12. Past sales keep `standardPriceAtSale`.
+   */
+  standardBagPrice?: number
 }
 
 export interface AppState {

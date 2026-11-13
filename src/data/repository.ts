@@ -146,7 +146,7 @@ export function sellBags(input: RecordSaleInput): Promise<DomainResult> {
   return mutate((state) => recordSale(state, input))
 }
 
-export function saveSettings(patch: Partial<Pick<AppState['settings'], 'personalUseReserveTargetGrams' | 'defaultBagSizeOz' | 'theme'>>): Promise<DomainResult> {
+export function saveSettings(patch: Partial<Pick<AppState['settings'], 'personalUseReserveTargetGrams' | 'defaultBagSizeOz' | 'theme' | 'standardBagPrice'>>): Promise<DomainResult> {
   return mutate((state) => updateSettings(state, patch))
 }
 

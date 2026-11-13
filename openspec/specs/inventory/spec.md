@@ -142,3 +142,11 @@ The system SHALL provide an Inventory page that lists every recorded green lot, 
 - GIVEN a lot has no remaining weight
 - WHEN the operator opens Log Roast
 - THEN that lot is still in the lot picker
+
+### Requirement: Lot cost is the entered bean cost
+A lot's total cost is the all-in bean cost as entered. The system MUST NOT add bags, labels, shipping, electricity, or labor to that cost. A lot whose total cost is zero is not a paid lot for the cost-trend comparison.
+
+#### Scenario: Zero-cost lot is not a price comparator
+- GIVEN one paid lot and a later lot with a total cost of zero
+- WHEN a still later paid lot is compared for a cost jump
+- THEN the zero-cost lot is not the comparator

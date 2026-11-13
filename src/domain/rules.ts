@@ -14,6 +14,7 @@ import type {
   Settings,
   Theme,
 } from '../types.ts'
+import { DEFAULT_STANDARD_BAG_PRICE, currentStandardPrice } from './pricing.ts'
 import {
   DEFAULT_BAG_SIZE_OZ,
   DEFAULT_RESERVE_GRAMS,
@@ -152,6 +153,7 @@ export function defaultSettings(): Settings {
     personalUseReserveTargetGrams: DEFAULT_RESERVE_GRAMS,
     defaultBagSizeOz: DEFAULT_BAG_SIZE_OZ,
     theme: 'light',
+    standardBagPrice: DEFAULT_STANDARD_BAG_PRICE,
   }
 }
 
@@ -540,6 +542,7 @@ export function recordSale(state: AppState, input: RecordSaleInput): DomainResul
     date: new Date(input.date).toISOString(),
     notes: blankToUndefined(input.notes),
     paid: input.paid !== false,
+    standardPriceAtSale: roundMoney(currentStandardPrice(state.settings)),
   }
   if (input.taxAmount != null) sale.taxAmount = roundMoney(input.taxAmount)
   next.sales.push(sale)
@@ -548,7 +551,7 @@ export function recordSale(state: AppState, input: RecordSaleInput): DomainResul
 
 export function updateSettings(
   state: AppState,
-  patch: Partial<Pick<Settings, 'personalUseReserveTargetGrams' | 'defaultBagSizeOz' | 'theme'>>,
+  patch: Partial<Pick<Settings, 'personalUseReserveTargetGrams' | 'defaultBagSizeOz' | 'theme' | 'standardBagPrice'>>,
 ): DomainResult {
   if (patch.personalUseReserveTargetGrams != null && (!isFiniteNumber(patch.personalUseReserveTargetGrams) || patch.personalUseReserveTargetGrams < 0)) {
     return fail(state, 'Personal-use reserve target cannot be negative.')
@@ -556,11 +559,16 @@ export function updateSettings(
   if (patch.defaultBagSizeOz != null && (!isFiniteNumber(patch.defaultBagSizeOz) || patch.defaultBagSizeOz <= 0)) {
     return fail(state, 'Default bag size must be greater than zero.')
   }
+  if (patch.standardBagPrice != null && (!isFiniteNumber(patch.standardBagPrice) || roundMoney(patch.standardBagPrice) <= 0)) {
+    return fail(state, 'Standard bag price must be greater than zero.')
+  }
   if (patch.theme != null && patch.theme !== 'light' && patch.theme !== 'mocha') {
     return fail(state, 'Theme must be light or mocha.')
   }
   const next = structuredClone(state)
-  next.settings = { ...next.settings, ...patch, id: SETTINGS_ID }
+  const settings = { ...next.settings, ...patch, id: SETTINGS_ID }
+  if (patch.standardBagPrice != null) settings.standardBagPrice = roundMoney(patch.standardBagPrice)
+  next.settings = settings
   return { ok: true, state: next }
 }
 
@@ -620,7 +628,9 @@ export function applyEntityUpdate(state: AppState, update: EntityUpdate): Domain
   }
   const current = next.sales.find((item) => item.id === update.id)
   if (!current) return fail(state, 'Sale not found.')
-  const merged = { ...current, ...update.patch, id: current.id }
+  const patch = { ...update.patch }
+  delete patch.standardPriceAtSale
+  const merged = { ...current, ...patch, id: current.id }
   if (merged.saleAmount < 0) return fail(state, 'Sale amount cannot be negative.')
   next.sales = next.sales.map((item) => (item.id === current.id ? merged : item))
   return { ok: true, state: next }

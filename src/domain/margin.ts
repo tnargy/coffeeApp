@@ -31,6 +31,8 @@ export interface LotBreakEven extends LotMoney {
   status: LotCoverage
   standardMargin: number | null
   actualMargin: number | null
+  /** Green-equivalent cost of live personal roasted stock from this lot. Not added to COGS. */
+  personalCost: number
 }
 
 export interface CostTrend {
@@ -148,6 +150,28 @@ export function personalYieldExact(state: AppState): number {
   }, 0)
 }
 
+/** Green-equivalent cost of live personal roasted stock from one lot. Not added to COGS. */
+export function lotPersonalStockExact(state: AppState, lotId: number): number {
+  let sum = 0
+  for (const batch of state.batches) {
+    if (batch.greenLotId !== lotId || isVoided(batch)) continue
+    sum += roastedCost(state, batch, batchPools(batch).personalRemaining)
+  }
+  for (const bag of state.bags) {
+    if (isVoided(bag) || bag.status !== 'available' || bagClassification(state, bag) !== 'internal') continue
+    for (const source of bagSources(bag)) {
+      const batch = state.batches.find((item) => item.id === source.batchId)
+      if (batch && batch.greenLotId === lotId) sum += roastedCost(state, batch, source.weight)
+    }
+  }
+  return sum
+}
+
+/** Green-equivalent cost of live personal roasted stock from one lot, rounded to cents. */
+export function lotPersonalStockCost(state: AppState, lotId: number): number {
+  return roundMoney(lotPersonalStockExact(state, lotId))
+}
+
 /** Green-equivalent cost of live personal roasted stock. Not added to COGS. */
 export function personalStockCost(state: AppState): number {
   return roundMoney(personalStockExact(state))
@@ -203,14 +227,39 @@ interface SaleSlice {
   actualRevenue: number
 }
 
-function saleSlices(state: AppState, sale: Sale): SaleSlice[] {
-  const price = saleStandardPrice(sale)
-  const bagsByLot = new Map<number, number>()
-  let counted = 0
+/**
+ * A bag's share of the standard price: its weight divided by the packed
+ * bag weight for the default bag size. An 8 oz bag is 1, a 4 oz bag is
+ * about 0.5, so its standard revenue is about half the standard price.
+ * A bag with no usable weight counts as one whole bag, as before.
+ */
+export function bagStandardFraction(state: AppState, bag: BaggedUnit): number {
+  const bagGrams = standardBagWeightGrams(state.settings.defaultBagSizeOz)
+  if (!(bagGrams > 0) || !(bag.weight > 0)) return 1
+  return bag.weight / bagGrams
+}
+
+/** Sum of `bagStandardFraction` over the non-voided bags in a sale. */
+export function saleBagFractionTotal(state: AppState, sale: Sale): number {
+  let total = 0
   for (const id of sale.baggedUnitIds) {
     const bag = state.bags.find((item) => item.id === id)
     if (!bag || isVoided(bag)) continue
-    counted += 1
+    total += bagStandardFraction(state, bag)
+  }
+  return total
+}
+
+function saleSlices(state: AppState, sale: Sale): SaleSlice[] {
+  const price = saleStandardPrice(sale)
+  const bagsByLot = new Map<number, number>()
+  const standardWeights = new Map<number, number>()
+  let totalFraction = 0
+  for (const id of sale.baggedUnitIds) {
+    const bag = state.bags.find((item) => item.id === id)
+    if (!bag || isVoided(bag)) continue
+    const fraction = bagStandardFraction(state, bag)
+    totalFraction += fraction
     const sources = bagSources(bag)
     const denom = bag.weight > 0 ? bag.weight : sources.reduce((sum, source) => sum + source.weight, 0)
     if (denom <= 0) continue
@@ -219,10 +268,11 @@ function saleSlices(state: AppState, sale: Sale): SaleSlice[] {
       if (!batch) continue
       const share = source.weight / denom
       bagsByLot.set(batch.greenLotId, (bagsByLot.get(batch.greenLotId) ?? 0) + share)
+      standardWeights.set(batch.greenLotId, (standardWeights.get(batch.greenLotId) ?? 0) + fraction * share)
     }
   }
-  const weights = [...bagsByLot.entries()].map(([key, weight]) => ({ key, weight }))
-  const standardTotal = roundMoney(counted * price)
+  const weights = [...standardWeights.entries()].map(([key, weight]) => ({ key, weight }))
+  const standardTotal = roundMoney(totalFraction * price)
   const actual = roundMoney(sale.saleAmount)
   const overpayTotal = roundMoney(Math.max(0, actual - standardTotal))
   const shortfallTotal = roundMoney(Math.max(0, standardTotal - actual))
@@ -312,6 +362,7 @@ export function lotBreakEvens(state: AppState, price = currentStandardPrice(stat
       status: coverage(lot.totalCost, row.standardRevenue),
       standardMargin,
       actualMargin,
+      personalCost: lotPersonalStockCost(state, lot.id),
     }
   })
 }
@@ -329,10 +380,7 @@ export function monthlySales(state: AppState): MonthHistory[] {
       shortfall: 0,
     }
     const slices = saleSlices(state, sale)
-    const counted = sale.baggedUnitIds.filter((id) => {
-      const bag = state.bags.find((item) => item.id === id)
-      return bag != null && !isVoided(bag)
-    }).length
+    const counted = saleBagFractionTotal(state, sale)
     row.bags += counted
     if (slices.length === 0) {
       const price = saleStandardPrice(sale)

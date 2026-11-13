@@ -66,6 +66,10 @@ export function LotMarginSection({ state }: { state: AppState }) {
   const draft = priceDraft ?? String(standard)
   const price = Number(draft)
   const priceOk = Number.isFinite(price) && price > 0
+  // An invalid what-if price is ignored: the section falls back to the
+  // current standard price instead of showing a broken what-if.
+  const effectivePrice = priceOk ? price : standard
+  const shownPrice = priceOk ? draft : String(standard)
   const rows = lotBreakEvens(state)
   const trend = new Map(costTrend(state).map((row) => [row.lotId, row]))
   const lots = new Map(state.lots.map((lot) => [lot.id, lot]))
@@ -82,16 +86,16 @@ export function LotMarginSection({ state }: { state: AppState }) {
       <label className="field what-if-price">
         <span>What-if bag price</span>
         <input
-          value={draft}
+          value={shownPrice}
           onChange={(event) => setPriceDraft(event.target.value)}
           inputMode="decimal"
           aria-describedby="what-if-hint"
         />
         <small id="what-if-hint">
           Changes forward profit per bag and per lot only. Recorded sales, standard revenue, and break-even stay put.
+          An invalid price falls back to the standard price.
         </small>
       </label>
-      {priceOk ? null : <p className="error">What-if price must be greater than zero.</p>}
       {rows.length === 0 ? <p className="muted">No lots yet.</p> : null}
       {rows.length > 0 ? (
         <div className="table-wrap">
@@ -104,6 +108,7 @@ export function LotMarginSection({ state }: { state: AppState }) {
                 <th>Bags sold</th>
                 <th>Revenue</th>
                 <th>Standard</th>
+                <th>Personal</th>
                 <th>Profit left</th>
                 <th>Break-even</th>
                 <th>Still to go</th>
@@ -125,7 +130,7 @@ export function LotMarginSection({ state }: { state: AppState }) {
                     flagged={flag?.flagged === true}
                     jump={flag?.jumpFraction ?? null}
                     compared={compared}
-                    whatIfPrice={priceOk ? price : null}
+                    whatIfPrice={effectivePrice}
                   />
                 )
               })}
@@ -152,7 +157,7 @@ function LotRows({
   flagged: boolean
   jump: number | null
   compared: GreenLot | undefined
-  whatIfPrice: number | null
+  whatIfPrice: number
 }) {
   const stored = lot.personalReserveGrams ?? 0
   const [reserveDraft, setReserveDraft] = useState<string | null>(null)
@@ -160,7 +165,8 @@ function LotRows({
   const reserveGrams = toGrams(Number(shown), 'lb')
   const reserveOk = shown.trim() !== '' && Number.isFinite(reserveGrams) && reserveGrams >= 0
   const forward = lotForward(state, lot, reserveOk ? reserveGrams : undefined)
-  const hypothetical = whatIfPrice == null ? null : whatIfProfit(forward, whatIfPrice, row.actualRevenue, row.totalCost)
+  const hypothetical = whatIfProfit(forward, whatIfPrice, row.actualRevenue, row.totalCost)
+  const noCost = row.totalCost === 0
   return (
     <>
       <tr>
@@ -182,13 +188,14 @@ function LotRows({
         <td>{displayBags(row.bags)}</td>
         <td>{formatMoney(row.actualRevenue)}</td>
         <td>{formatMoney(row.standardRevenue)}</td>
+        <td>{formatMoney(row.personalCost)}</td>
         <td className={row.profitLeft < 0 ? 'loss' : 'gain'}>{formatMoney(row.profitLeft)}</td>
-        <td>{row.breakEvenBags}</td>
-        <td>{row.bagsToBreakEven}</td>
+        <td>{noCost ? '—' : row.breakEvenBags}</td>
+        <td>{noCost ? '—' : row.bagsToBreakEven}</td>
         <td className={statusClass(row.status)}>{row.status}</td>
       </tr>
       <tr className="forward-row">
-        <td colSpan={10}>
+        <td colSpan={11}>
           <span>
             Overpay {formatMoney(row.overpay)} · shortfall {formatMoney(row.shortfall)}
             {row.standardMargin == null ? null : ` · standard margin ${displayPercent(row.standardMargin)}`}
@@ -216,7 +223,8 @@ function LotRows({
             {reserveOk ? (
               <small>
                 Selling the reserve adds {displayBags(forward.reserveSoldExtraBags)} bags,{' '}
-                {formatMoney(forward.reserveSoldExtraRevenue)}.
+                {formatMoney(forward.reserveSoldExtraRevenue)} revenue,{' '}
+                {formatMoney(forward.reserveSoldExtraRevenue)} more profit left — the beans are already paid for.
               </small>
             ) : (
               <small className="error">Reserve cannot be negative.</small>

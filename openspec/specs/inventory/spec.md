@@ -150,3 +150,22 @@ A lot's total cost is the all-in bean cost as entered. The system MUST NOT add b
 - GIVEN one paid lot and a later lot with a total cost of zero
 - WHEN a still later paid lot is compared for a cost jump
 - THEN the zero-cost lot is not the comparator
+
+### Requirement: Lot rows show margin, cost trend, and forward margin
+Each lot row on Inventory and on History MUST show $/kg, total cost, break-even status (`covered`, `not covered`, or `no cost` for a $0 lot), bags to break even, and forward margin (expected bags, expected revenue, expected whole-lot profit left), using the same definitions as the Dashboard margin table. The cost-trend flag MUST be shown on the lot row when it applies. The margin list MUST include all lots, including depleted ones (remaining green 0 g). A $0 lot shows status `no cost` and no break-even line.
+
+#### Scenario: November lots are flagged on Inventory
+- GIVEN the Nov 10 export fixture
+- WHEN the operator views Inventory
+- THEN the Nov 9 Guatemala and Peru lots show the cost-trend flag
+- AND the October lots do not
+
+#### Scenario: Depleted lot still shows margin
+- GIVEN lot 1, Guatemala, remaining green 0 g, 6.0 bags sold, $72.00 revenue
+- WHEN the operator views Inventory
+- THEN lot 1 is listed with status `covered`, 0 bags to break even, and $32.65 whole-lot profit left
+
+#### Scenario: $0 sample lot shows no cost
+- GIVEN a sample lot with total cost $0
+- WHEN the operator views Inventory
+- THEN it shows status `no cost` and no break-even line

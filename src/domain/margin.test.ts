@@ -282,6 +282,79 @@ describe('standard price bookkeeping', () => {
   })
 })
 
+describe('review fixes (Nov 12)', () => {
+  it('shows personal cost per lot, summing to the total personal stock cost', () => {
+    const rows = lotBreakEvens(exportState())
+    expect(rows.map((row) => row.personalCost)).toEqual([12.11, 6.02, 0, 0, 0])
+    const sum = rows.reduce((total, row) => total + row.personalCost, 0)
+    expect(Math.abs(sum - personalStockCost(exportState()))).toBeLessThanOrEqual(0.02)
+  })
+
+  it('leaves a $50 lot with 4 bags sold at $20 not covered, with 1 bag to break even', () => {
+    const state = sellBagsOf(227, 4, 80)
+    const row = lotBreakEvens(state)[0]
+    expect(row.totalCost).toBe(50)
+    expect(row.standardRevenue).toBe(48)
+    expect(row.overpay).toBe(32)
+    expect(row.actualRevenue).toBe(80)
+    expect(row.status).toBe('not covered')
+    expect(row.breakEvenBags).toBe(5)
+    expect(row.bagsToBreakEven).toBe(1)
+  })
+
+  it('prices a 4 oz bag at about half the standard price', () => {
+    const state = sellBagsOf(113, 1, 12)
+    const row = lotBreakEvens(state)[0]
+    expect(displayBags(row.bags)).toBe('1.0')
+    expect(row.standardRevenue).toBe(5.97)
+    expect(row.overpay).toBe(6.03)
+    expect(row.shortfall).toBe(0)
+    expect(row.actualRevenue).toBe(12)
+    const months = monthlySales(state)
+    expect(months).toHaveLength(1)
+    expect(months[0].month).toBe('2026-03')
+    expect(displayBags(months[0].bags)).toBe('0.5')
+    expect(months[0].standardRevenue).toBe(5.97)
+  })
+})
+
+/** One lot, one roast, `count` bags of `weightPerBag` grams sold in one sale for `amount`. */
+function sellBagsOf(weightPerBag: number, count: number, amount: number): AppState {
+  const received = receiveLot(emptyState(), {
+    origin: 'Ethiopia',
+    weightReceived: 2000,
+    dateReceived: '2026-03-01',
+    totalCost: 50,
+    personalReserveGrams: 0,
+  })
+  if (!received.ok) throw new Error('lot')
+  const roasted = recordRoast(received.state, {
+    greenLotId: received.state.lots[0].id,
+    greenWeightCharged: 2000,
+    roastedYield: 1700,
+    classification: 'for-sale',
+    roastDate: '2026-03-02T00:00:00.000Z',
+    profile,
+  })
+  if (!roasted.ok) throw new Error('roast')
+  const packed = packBags(roasted.state, {
+    batchId: roasted.state.batches[0].id,
+    bagCount: count,
+    weightPerBag,
+    now: Date.parse('2026-03-03T00:00:00.000Z'),
+  })
+  if (!packed.ok) throw new Error('pack')
+  const bags = packed.state.bags.filter((bag) => bag.status === 'available')
+  expect(bags).toHaveLength(count)
+  const sold = recordSale(packed.state, {
+    baggedUnitIds: bags.map((bag) => bag.id),
+    saleAmount: amount,
+    date: '2026-03-04T00:00:00.000Z',
+  })
+  if (!sold.ok) throw new Error(sold.error.message)
+  return sold.state
+}
+
 function roundCents(value: number): number {
   return Math.round(value * 100) / 100
 }

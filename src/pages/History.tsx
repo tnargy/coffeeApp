@@ -2,9 +2,10 @@ import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { chipFor, iconFor } from '../activityIcons.ts'
 import { Icon } from '../components/Icon.tsx'
+import { costTrend, displayBags, displayPercent, lotBreakEvens, lotForward } from '../domain/margin.ts'
 import { batchClassificationLabel, batchTrail, lotTrail, profileFacts, roastTimingText } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
-import { formatDate, formatWhen } from '../units.ts'
+import { formatDate, formatMoney, formatWhen } from '../units.ts'
 
 export function History() {
   const state = useAppState()
@@ -29,6 +30,14 @@ export function History() {
   const selectedLot = !batchId && lotId ? state.lots.find((lot) => lot.id === Number(lotId)) : undefined
   const subject = selectedBatch ? `Batch #${selectedBatch.id}` : selectedLot ? selectedLot.name : 'Select a lot or batch'
   const empty = state.lots.length === 0 && state.batches.length === 0
+  const marginRows = new Map(lotBreakEvens(state).map((row) => [row.lotId, row]))
+  const trendRows = new Map(costTrend(state).map((row) => [row.lotId, row]))
+  const lotById = new Map(state.lots.map((lot) => [lot.id, lot]))
+  const selectedMargin = selectedLot ? marginRows.get(selectedLot.id) : undefined
+  const selectedTrend = selectedLot ? trendRows.get(selectedLot.id) : undefined
+  const selectedCompared =
+    selectedTrend?.comparatorLotId == null ? undefined : lotById.get(selectedTrend.comparatorLotId)
+  const selectedForward = selectedLot ? lotForward(state, selectedLot) : undefined
 
   return (
     <div className="stack">
@@ -40,15 +49,28 @@ export function History() {
         <section className="card">
           <h2>Lots</h2>
           <ul className="plain">
-            {state.lots.map((lot) => (
-              <li key={lot.id} className={selectedLot?.id === lot.id ? 'is-selected' : undefined}>
-                <button type="button" className="linkish" onClick={() => setParams({ lot: String(lot.id) })}>
-                  {lot.origin}
-                </button>
-                {' · '}
-                {lot.name}
-              </li>
-            ))}
+            {state.lots.map((lot) => {
+              const row = marginRows.get(lot.id)
+              const flag = trendRows.get(lot.id)
+              return (
+                <li key={lot.id} className={selectedLot?.id === lot.id ? 'is-selected' : undefined}>
+                  <button type="button" className="linkish" onClick={() => setParams({ lot: String(lot.id) })}>
+                    {lot.origin}
+                  </button>
+                  {' · '}
+                  {lot.name}
+                  {row ? (
+                    <span className="muted">
+                      {' · '}
+                      {row.status}
+                      {flag?.flagged && flag.jumpFraction != null ? (
+                        <span className="flag"> · up {displayPercent(flag.jumpFraction)}</span>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
           <h2>Batches</h2>
           <ul className="plain">
@@ -66,6 +88,35 @@ export function History() {
         <section className="card">
           <h2>{subject}</h2>
           <p className="stage-legend">receipt → roast → rest → bag → sale</p>
+          {selectedLot && selectedMargin && selectedForward ? (
+            <p>
+              {formatMoney(selectedLot.costPerKg)}/kg · cost {formatMoney(selectedLot.totalCost)} ·{' '}
+              <span
+                className={
+                  selectedMargin.status === 'covered'
+                    ? 'gain'
+                    : selectedMargin.status === 'not covered'
+                      ? 'loss'
+                      : 'muted'
+                }
+              >
+                {selectedMargin.status}
+              </span>
+              {' · '}
+              {selectedMargin.totalCost === 0
+                ? 'no break-even'
+                : `${selectedMargin.bagsToBreakEven} bags to break even`}
+              {' · '}forward {displayBags(selectedForward.forwardBags)} bags ·{' '}
+              {formatMoney(selectedForward.forwardRevenue)} · profit left {formatMoney(selectedForward.forwardProfit)}
+              {selectedTrend?.flagged && selectedTrend.jumpFraction != null ? (
+                <span className="flag">
+                  {' '}
+                  · up {displayPercent(selectedTrend.jumpFraction)}
+                  {selectedCompared ? ` vs ${selectedCompared.name}` : ''}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           {empty ? <p className="muted">Choose a lot or batch to see its trail.</p> : null}
           <ol className="timeline">
             {events.map((event, index) => (

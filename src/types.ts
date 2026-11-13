@@ -2,6 +2,8 @@ export type Classification = 'internal' | 'for-sale'
 export type Theme = 'light' | 'mocha'
 export type BatchStatus = 'ready-to-bag' | 'bagged'
 export type BagStatus = 'available' | 'sold'
+export type GrindPreference = 'ground' | 'whole' | 'unknown'
+export type CustomerStatus = 'interested' | 'bought' | 'repeat'
 
 export interface GreenLot {
   id: number
@@ -89,8 +91,19 @@ export interface Sale {
   date: string
   notes?: string
   paid?: boolean
+  /** Set when the operator picks a customer, or by the one-time note link. Absent means unlinked. */
+  customerId?: number
   voidedAt?: string
   voidReason?: string
+}
+
+export interface Customer {
+  id: number
+  name: string
+  grindPreference: GrindPreference
+  notes?: string
+  /** ISO 8601 UTC timestamp set when the customer is created. */
+  createdAt: string
 }
 
 export type AuditEntity = 'batch' | 'bagging' | 'sale'
@@ -116,6 +129,12 @@ export interface Settings {
   personalUseReserveTargetGrams: number
   defaultBagSizeOz: number
   theme?: Theme
+  /**
+   * Set when the one-time sale-note link has run for this dataset.
+   * Ordinary loads do not scan sales again after this is present.
+   * A backup from before customers (format 2 and older) does not carry it, so import runs the link.
+   */
+  customersLinkedAt?: string
 }
 
 export interface AppState {
@@ -124,6 +143,7 @@ export interface AppState {
   batches: RoastBatch[]
   bags: BaggedUnit[]
   sales: Sale[]
+  customers: Customer[]
   audit: AuditEntry[]
   settings: Settings
 }

@@ -3,9 +3,16 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorBanner, Field, SuccessBanner } from '../components/Field.tsx'
 import { sellBags } from '../data/repository.ts'
+import {
+  customerOptionLabel,
+  customerStanding,
+  findCustomerByName,
+  grindLabel,
+} from '../domain/customers.ts'
 import { bagClassification, bagSources } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import { classificationLabel } from '../labels.ts'
+import type { GrindPreference } from '../types.ts'
 import { currentLocalInput, formatGrams, fromLocalInput } from '../units.ts'
 
 export function RecordSale() {
@@ -16,6 +23,9 @@ export function RecordSale() {
   const [date, setDate] = useState(currentLocalInput)
   const [notes, setNotes] = useState('')
   const [paid, setPaid] = useState(true)
+  const [customerChoice, setCustomerChoice] = useState('none')
+  const [newName, setNewName] = useState('')
+  const [newGrind, setNewGrind] = useState<GrindPreference>('unknown')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const available = state?.bags.filter((bag) => bag.status === 'available' && bagClassification(state, bag) === 'for-sale') ?? []
@@ -40,6 +50,11 @@ export function RecordSale() {
       date: iso,
       notes,
       paid,
+      ...(customerChoice === 'new'
+        ? { newCustomer: { name: newName, grindPreference: newGrind } }
+        : customerChoice !== 'none'
+          ? { customerId: Number(customerChoice) }
+          : {}),
     })
     if (!result.ok) {
       setError(result.error.message)
@@ -51,9 +66,19 @@ export function RecordSale() {
     setTax('')
     setNotes('')
     setPaid(true)
+    setCustomerChoice('none')
+    setNewName('')
+    setNewGrind('unknown')
   }
 
   if (!state) return <p className="muted">Loading inventory…</p>
+
+  const customers = [...state.customers].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  const picked = customerChoice !== 'none' && customerChoice !== 'new'
+    ? state.customers.find((customer) => customer.id === Number(customerChoice))
+    : undefined
+  const matched = customerChoice === 'new' ? findCustomerByName(state.customers, newName) : undefined
+  const preview = picked ?? matched
 
   return (
     <form className="stack form" onSubmit={onSubmit}>
@@ -100,6 +125,39 @@ export function RecordSale() {
         </fieldset>
       )}
       <div className="form-grid">
+        <Field label="Customer" hint="Optional. Leave this as no customer to keep the sale unlinked.">
+          <select value={customerChoice} onChange={(event) => setCustomerChoice(event.target.value)}>
+            <option value="none">No customer</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={String(customer.id)}>
+                {customerOptionLabel(customer)}
+              </option>
+            ))}
+            <option value="new">New customer</option>
+          </select>
+        </Field>
+        {customerChoice === 'new' ? (
+          <Field label="New customer name">
+            <input value={newName} onChange={(event) => setNewName(event.target.value)} required />
+          </Field>
+        ) : null}
+        {customerChoice === 'new' && !matched ? (
+          <Field label="Grind preference">
+            <select value={newGrind} onChange={(event) => setNewGrind(event.target.value as GrindPreference)}>
+              <option value="unknown">Unknown</option>
+              <option value="ground">Ground</option>
+              <option value="whole">Whole bean</option>
+            </select>
+          </Field>
+        ) : null}
+        {preview ? (
+          <p className="muted">
+            Grind: {grindLabel(preview.grindPreference)}. Bags bought: {customerStanding(state, preview).bagsBought}.
+            {matched ? ` This name matches ${matched.name}, so the sale uses that customer.` : ''}
+          </p>
+        ) : customerChoice === 'new' && newName.trim() ? (
+          <p className="muted">Grind: {grindLabel(newGrind)}. Bags bought: 0.</p>
+        ) : null}
         <Field label="Sale amount">
           <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" required />
         </Field>

@@ -12,6 +12,7 @@ flowchart LR
   profiles["Save a profile"] -.-> roast
   roast --> pack["Pack bags"]
   pack --> sale["Record a sale"]
+  customers["Customers"] -.-> sale
   sale --> records["Records"]
   roast --> records
   pack --> records
@@ -61,9 +62,27 @@ Personal bags are not offered for sale. A sale that includes one is refused, and
 
 ## Sales and money
 
-A sale records an amount, an optional tax amount, a date, notes, and paid or unpaid. Leaving paid unset stores the sale as paid. Only an explicit unpaid sale counts on the dashboard unpaid card.
+A sale records an amount, an optional tax amount, a date, notes, paid or unpaid, and an optional customer. Leaving paid unset stores the sale as paid. Only an explicit unpaid sale counts on the dashboard unpaid card. Leaving the customer unset stores the sale with no customer.
 
-The Records sales list shows paid or unpaid on every sale, and shows notes when they are not blank.
+The Records sales list shows paid or unpaid on every sale, shows the linked customer name when there is one, and shows notes when they are not blank.
+
+## Customers
+
+Customers are a directory, not a storefront. Each customer has a name, a grind preference (ground, whole bean, or unknown), optional notes, and the time they were added. There is no contact info, bean preference, or delete.
+
+Status and totals are derived from linked sales that are not void:
+
+- `interested` is no such sale, `bought` is one, `repeat` is two or more.
+- Bags bought counts every bag id on those sales. Total spent sums their sale amounts, including unpaid sales. Last purchase is the latest sale date, or blank when there is none.
+- A customer with only voided sales is interested, with 0 bags and 0 spent.
+
+Record Sale can pick an existing customer (the option includes the grind) or type a new name. A typed name that already exists, ignoring case, reuses that customer. The form shows the grind and bags bought after a customer is chosen.
+
+The first time the app loads after this directory exists, and again when a backup that has not been linked is imported, unlinked sales are matched from their notes. The note is trimmed, whitespace is collapsed, and a trailing ` - Ground`, ` - Whole`, ` ground`, or ` whole` is removed, longest first, until none remains. That name matches an existing customer or creates one. The grind on a new customer comes from the suffix that was removed. The note itself is not rewritten. Later loads do not scan again, and a sale recorded with no customer after that point stays unlinked.
+
+A separate JSON file can add customers (`coffeeApp customers import v1`). It skips duplicate names and does not replace the directory. It does not run by itself.
+
+Clearing this browser's storage without a backup starts from an empty directory. Customers come back only by restoring a backup that contains them.
 
 P&L uses live sales only:
 
@@ -102,4 +121,4 @@ flowchart LR
   hook --> page
 ```
 
-Settings can export that state as JSON and replace it with an import. Import replaces the current data. It does not merge.
+Settings can export that state as JSON and replace it with an import. The export is format version 3 and includes customers. Import replaces the current data. It does not merge. A format 2 file restores with an empty customer list, then sale notes are linked once. A format 3 file must include customers. Duplicate names keep the first customer. A sale that points at a customer the file does not contain is restored unlinked.

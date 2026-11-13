@@ -300,6 +300,7 @@ export function Records() {
         <ul className="plain">
           {state.sales.map((sale) => {
             const label = `Sale #${sale.id}`
+            const customerName = sale.customerId == null ? undefined : state.customers.find((customer) => customer.id === sale.customerId)?.name
             return (
               <li key={sale.id} className="card">
                 <strong>{label}</strong>
@@ -307,6 +308,7 @@ export function Records() {
                   {formatMoney(sale.saleAmount)} · {sale.baggedUnitIds.length} bag
                   {sale.baggedUnitIds.length === 1 ? '' : 's'} · {formatDate(sale.date)}
                   {sale.paid === false ? ' · unpaid' : ' · paid'}
+                  {customerName ? ` · ${customerName}` : ''}
                 </p>
                 {sale.notes?.trim() ? <p>{sale.notes.trim()}</p> : null}
                 {isVoided(sale) ? <p className="muted">{voidMarker(sale).trim()}</p> : null}

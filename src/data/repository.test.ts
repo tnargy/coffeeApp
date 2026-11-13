@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db, resetDatabase } from '../db.ts'
 import { buildBackup } from '../backup.ts'
+import { emptyState } from '../domain/rules.ts'
 import { SETTINGS_ID } from '../units.ts'
 import type { RoastBatch } from '../types.ts'
-import { crud, editRecord, ensureReady, importBackup, loadState, logRoast, packBatch, voidRecord } from './repository.ts'
+import { crud, createCustomer, editRecord, ensureReady, importBackup, loadState, logRoast, packBatch, voidRecord } from './repository.ts'
 
 beforeEach(async () => {
   await resetDatabase()
@@ -309,5 +310,114 @@ describe('persistence', () => {
     expect(state.audit).toHaveLength(1)
     expect(state.audit[0].note).toBe('Booked twice')
     expect(state.audit[0].action).toBe('void')
+  })
+
+  it('starts with no customers and links existing sale notes only on the first load', async () => {
+    await db.settings.add({ id: SETTINGS_ID, personalUseReserveTargetGrams: 453, defaultBagSizeOz: 8 })
+    await db.sales.add({
+      id: 1,
+      baggedUnitIds: [],
+      saleAmount: 12,
+      date: '2026-01-10T00:00:00.000Z',
+      notes: 'Alex Ground',
+    })
+    await ensureReady()
+    const linked = await loadState()
+    expect(linked.customers.map((customer) => ({ name: customer.name, grindPreference: customer.grindPreference }))).toEqual([
+      { name: 'Alex', grindPreference: 'ground' },
+    ])
+    expect(linked.sales[0].customerId).toBe(linked.customers[0].id)
+    expect(linked.sales[0].notes).toBe('Alex Ground')
+    expect(linked.settings.customersLinkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+
+    await db.sales.add({
+      id: 2,
+      baggedUnitIds: [],
+      saleAmount: 8,
+      date: '2026-02-01T00:00:00.000Z',
+      notes: 'Jordan Whole',
+    })
+    await ensureReady()
+    const again = await loadState()
+    expect(again.customers).toHaveLength(1)
+    expect(again.sales.find((sale) => sale.id === 2)?.customerId).toBeUndefined()
+    expect(again.sales.find((sale) => sale.id === 2)?.notes).toBe('Jordan Whole')
+  })
+
+  it('persists a customer and refuses a duplicate name', async () => {
+    await ensureReady()
+    const created = await createCustomer({
+      name: 'Sam',
+      grindPreference: 'whole',
+      notes: 'after lunch',
+      now: '2026-04-01T00:00:00.000Z',
+    })
+    expect(created.ok).toBe(true)
+    const state = await loadState()
+    expect(state.customers).toEqual([
+      expect.objectContaining({
+        name: 'Sam',
+        grindPreference: 'whole',
+        notes: 'after lunch',
+        createdAt: '2026-04-01T00:00:00.000Z',
+      }),
+    ])
+    const duplicate = await createCustomer({ name: 'sam', grindPreference: 'ground' })
+    expect(duplicate.ok).toBe(false)
+    const after = await loadState()
+    expect(after.customers).toHaveLength(1)
+  })
+
+  it('links a version 2 backup from sale notes and does not relink sales in a version 3 backup', async () => {
+    await ensureReady()
+    const legacy = buildBackup(emptyState()) as unknown as Record<string, unknown>
+    legacy.formatVersion = 2
+    delete legacy.customers
+    legacy.sales = [{ id: 1, baggedUnitIds: [], saleAmount: 18, date: '2026-01-14T00:00:00.000Z', notes: 'Riley Whole' }]
+    const imported = await importBackup(JSON.stringify(legacy))
+    expect(imported.ok).toBe(true)
+    if (!imported.ok) return
+    expect(imported.summary).toContain('Linked 1 sale from sale notes.')
+    const linked = await loadState()
+    expect(linked.customers).toEqual([expect.objectContaining({ name: 'Riley', grindPreference: 'whole' })])
+    expect(linked.sales[0].notes).toBe('Riley Whole')
+    expect(linked.sales[0].customerId).toBe(linked.customers[0].id)
+
+    const current = buildBackup(linked)
+    current.sales = [
+      ...current.sales,
+      { id: 2, baggedUnitIds: [], saleAmount: 9, date: '2026-02-01T00:00:00.000Z', notes: 'Casey - Ground' },
+    ]
+    const again = await importBackup(JSON.stringify(current))
+    expect(again.ok).toBe(true)
+    if (!again.ok) return
+    const restored = await loadState()
+    expect(restored.customers.map((customer) => customer.name)).toEqual(['Riley'])
+    expect(restored.sales.find((sale) => sale.id === 2)?.customerId).toBeUndefined()
+    expect(restored.sales.find((sale) => sale.id === 2)?.notes).toBe('Casey - Ground')
+  })
+
+  it('reports skipped duplicate customers and leaves a missing customer sale unlinked', async () => {
+    await ensureReady()
+    const backup = buildBackup(emptyState()) as unknown as {
+      customers: unknown[]
+      sales: unknown[]
+      settings: { customersLinkedAt?: string }
+    }
+    delete backup.settings.customersLinkedAt
+    backup.customers = [
+      { id: 1, name: 'Sam', grindPreference: 'ground', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 2, name: ' sam ', grindPreference: 'whole', createdAt: '2026-01-02T00:00:00.000Z' },
+    ]
+    backup.sales = [{ id: 7, baggedUnitIds: [], saleAmount: 5, date: '2026-01-03T00:00:00.000Z', notes: 'sam whole', customerId: 2 }]
+    const result = await importBackup(JSON.stringify(backup))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.summary).toContain('Skipped duplicate names: sam.')
+    expect(result.summary).toContain('Unlinked 1 sale whose customer was not in the backup: #7.')
+    const state = await loadState()
+    expect(state.customers).toEqual([expect.objectContaining({ name: 'Sam', grindPreference: 'ground' })])
+    expect(state.sales[0].customerId).toBeUndefined()
+    expect(state.sales[0].notes).toBe('sam whole')
   })
 })

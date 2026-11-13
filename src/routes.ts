@@ -7,6 +7,7 @@ export const APP_ROUTES = [
   { path: '/profiles', label: 'Profiles' },
   { path: '/pack', label: 'Pack Bags' },
   { path: '/sale', label: 'Record Sale' },
+  { path: '/customers', label: 'Customers' },
   { path: '/history', label: 'History' },
   { path: '/records', label: 'Records' },
   { path: '/settings', label: 'Settings' },

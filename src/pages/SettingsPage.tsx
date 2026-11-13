@@ -8,7 +8,14 @@ import { useAppState } from '../hooks/useAppState.ts'
 import type { Theme } from '../types.ts'
 import { GRAMS_PER_LB, toGrams } from '../units.ts'
 
-type PendingImport = { text: string; lots: number; batches: number; sales: number }
+type PendingImport = {
+  text: string
+  lots: number
+  batches: number
+  sales: number
+  customers: number
+  linkNotes: boolean
+}
 
 export function SettingsPage() {
   const state = useAppState()
@@ -64,6 +71,8 @@ export function SettingsPage() {
       lots: parsed.state.lots.length,
       batches: parsed.state.batches.length,
       sales: parsed.state.sales.length,
+      customers: parsed.state.customers.length,
+      linkNotes: parsed.state.settings.customersLinkedAt == null,
     })
   }
 
@@ -82,7 +91,7 @@ export function SettingsPage() {
       return
     }
     setPendingImport(null)
-    setSuccess('Backup imported. The data in this browser now matches the file.')
+    setSuccess(`Backup imported. ${result.summary}`)
   }
 
   if (!state) return <p className="muted">Loading inventory…</p>
@@ -115,7 +124,7 @@ export function SettingsPage() {
       <section className="card">
         <h2>Backup</h2>
         <p className="muted">
-          Download a JSON backup of every lot, profile, roast, bag, sale, and setting. Import a backup to replace the
+          Download a JSON backup of every lot, profile, roast, bag, sale, customer, and setting. Import a backup to replace the
           data in this browser, for example to move to another machine.
         </p>
         <div className="form-actions">
@@ -130,9 +139,10 @@ export function SettingsPage() {
           <div className="form-grid">
             <p className="warning">
               Import this backup and replace the data in this browser? It has {pendingImport.lots} lot
-              {pendingImport.lots === 1 ? '' : 's'}, {pendingImport.batches} roast{pendingImport.batches === 1 ? '' : 's'},
-              and {pendingImport.sales} sale{pendingImport.sales === 1 ? '' : 's'}. The current data is replaced, not
-              merged. Export a backup first if you want to keep it.
+              {pendingImport.lots === 1 ? '' : 's'}, {pendingImport.batches} roast{pendingImport.batches === 1 ? '' : 's'},{' '}
+              {pendingImport.sales} sale{pendingImport.sales === 1 ? '' : 's'}, and {pendingImport.customers} customer
+              {pendingImport.customers === 1 ? '' : 's'}. The current data is replaced, not merged.
+              {pendingImport.linkNotes ? ' Sale notes that name a buyer will be linked once.' : ''} Export a backup first if you want to keep it.
             </p>
             <div className="form-actions">
               <button type="button" onClick={onConfirmImport}>

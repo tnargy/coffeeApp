@@ -1,0 +1,37 @@
+{
+  "bags": [
+    { "id": 1, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" },
+    { "id": 2, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" },
+    { "id": 3, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" },
+    { "id": 4, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" },
+    { "id": 5, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" },
+    { "id": 6, "batchId": 1, "bagSizeOz": 8, "weight": 226, "status": "sold", "createdAt": "2026-01-01T00:00:00.000Z" }
+  ],
+  "sales": [
+    { "id": 1, "baggedUnitIds": [1], "saleAmount": 12, "date": "2026-01-10T00:00:00.000Z", "notes": "  Alex   Ground ", "paid": true },
+    { "id": 2, "baggedUnitIds": [2], "saleAmount": 14, "date": "2026-01-11T00:00:00.000Z", "notes": "Jordan - Whole", "paid": true },
+    { "id": 3, "baggedUnitIds": [3], "saleAmount": 10, "date": "2026-01-12T00:00:00.000Z", "notes": "Sam", "paid": false },
+    { "id": 4, "baggedUnitIds": [4], "saleAmount": 16, "date": "2026-01-13T00:00:00.000Z", "notes": "Casey - Ground", "paid": true },
+    { "id": 5, "baggedUnitIds": [5], "saleAmount": 18, "date": "2026-01-14T00:00:00.000Z", "notes": "Riley Whole", "paid": true },
+    { "id": 6, "baggedUnitIds": [6], "saleAmount": 8, "date": "2026-02-01T00:00:00.000Z", "notes": "alex", "paid": true },
+    { "id": 7, "baggedUnitIds": [5], "saleAmount": 20, "date": "2026-02-02T00:00:00.000Z", "notes": "  Morgan  ", "paid": true, "voidedAt": "2026-02-03T00:00:00.000Z", "voidReason": "Recorded twice" },
+    { "id": 8, "baggedUnitIds": [2], "saleAmount": 8, "date": "2026-02-03T00:00:00.000Z", "notes": "jordan", "paid": true }
+  ],
+  "expected": {
+    "linkedSales": 8,
+    "customerCount": 6,
+    "bagCount": 6,
+    "saleCount": 8,
+    "voidedSales": 1,
+    "nonVoidedRevenue": 86,
+    "summary": "6 customers · 2 ground · 2 whole · 2 unknown · 1 interested",
+    "customers": [
+      { "name": "Alex", "grindPreference": "ground", "status": "repeat", "bagsBought": 2, "totalSpent": 20, "lastPurchaseDate": "2026-02-01T00:00:00.000Z" },
+      { "name": "Jordan", "grindPreference": "whole", "status": "repeat", "bagsBought": 2, "totalSpent": 22, "lastPurchaseDate": "2026-02-03T00:00:00.000Z" },
+      { "name": "Sam", "grindPreference": "unknown", "status": "bought", "bagsBought": 1, "totalSpent": 10, "lastPurchaseDate": "2026-01-12T00:00:00.000Z" },
+      { "name": "Casey", "grindPreference": "ground", "status": "bought", "bagsBought": 1, "totalSpent": 16, "lastPurchaseDate": "2026-01-13T00:00:00.000Z" },
+      { "name": "Riley", "grindPreference": "whole", "status": "bought", "bagsBought": 1, "totalSpent": 18, "lastPurchaseDate": "2026-01-14T00:00:00.000Z" },
+      { "name": "Morgan", "grindPreference": "unknown", "status": "interested", "bagsBought": 0, "totalSpent": 0, "lastPurchaseDate": null }
+    ]
+  }
+}

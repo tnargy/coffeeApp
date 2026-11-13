@@ -197,6 +197,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .check-inline { display: flex; gap: 0.5rem; align-items: center; }
 .gain { color: var(--green); }
 .loss { color: var(--danger); }
+.pnl-extra { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
+.pnl-extra p { margin: 0; }
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.data-table caption { text-align: left; font-weight: 600; margin-bottom: 0.4rem; }
+.data-table th, .data-table td { text-align: left; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.data-table th { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+.forward-row td { background: var(--cream); white-space: normal; }
+.flag { color: var(--amber); font-weight: 600; }
+.block { display: block; }
+.what-if-price { max-width: 18rem; margin: 0.75rem 0; }
+.reserve-what-if { display: flex; flex-wrap: wrap; gap: 0.45rem 0.8rem; align-items: center; margin-top: 0.35rem; }
+.reserve-what-if input { width: 5.5rem; border: 1px solid var(--line); background: white; border-radius: 10px; padding: 0.35rem 0.5rem; }
+.lot-margin td:first-child { min-width: 9rem; }
 @media (max-width: 980px) {
   .dash-board { grid-template-columns: 1fr; }
   .dash-pnl { grid-column: auto; }
@@ -249,4 +263,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 [data-theme="mocha"] .icon-chip.bean { background: #3a2c22; color: #e6c7a8; }
 [data-theme="mocha"] .icon-chip.money,
 [data-theme="mocha"] .icon-chip.warn { background: #3d2e1c; color: var(--amber); }
-[data-theme="mocha"] .icon-chip.due { background: #3a2220; color: var(--danger); }
+[data-theme="mocha"] .reserve-what-if input {
+  background: #241911;
+  border-color: var(--line);
+  color: var(--ink);
+}

@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon.tsx'
 import type { IconName } from '../components/Icon.tsx'
 import { crud } from '../data/repository.ts'
 import { batchClassificationLabel, dashboardSummary, isDepletedLot, isVoided, lotAllotment, pnl, profileLabel, roastTimingText, roastedUse, unpaidBalance, withDerivedStatus } from '../domain/rules.ts'
+import { LotMarginSection, PnlExtras } from './MarginSection.tsx'
 import { useAppState } from '../hooks/useAppState.ts'
 import { statusLabel } from '../labels.ts'
 import { showActivityAndActions } from './dashboardCards.ts'
@@ -231,8 +232,10 @@ export function Dashboard() {
             </div>
           </div>
           <small>From recorded sales and bean cost. Tax is stored only and is not calculated or remitted.</small>
+          <PnlExtras state={state} />
         </section>
       </div>
+      <LotMarginSection state={state} />
       <div className="dash-secondary">
         <section className="card">
           <h2>Recent profiles</h2>

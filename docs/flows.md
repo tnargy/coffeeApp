@@ -71,6 +71,11 @@ P&L uses live sales only:
 - Cost of goods is the green-lot cost of sold bags that are not void, split by each source batch's share of the bag.
 - Gross profit is revenue minus that cost.
 - Tax is not part of P&L.
+- Personal stock is the green cost of live personal bags and unpacked personal coffee. It is shown beside cost of goods and is not added again.
+- Each lot shows whether standard-price sales have covered its bean cost, how many bags that takes, and the profit left after the lot cost. Finished lots stay in that list.
+- Forward margin estimates bags still sellable after the lot's reserve, using that lot's roast loss, or the overall roast loss when the lot has not been roasted. A reserve what-if and a bag-price what-if recalculate that estimate and do not change stored sales.
+- A lot is flagged when its price per kilogram is at least 10% above the most recent earlier paid lot from an earlier day.
+- Monthly history groups live sales by month. A sale keeps the standard bag price from the day it was recorded. The settings price applies to later sales and to forward margin.
 
 ## Corrections
 

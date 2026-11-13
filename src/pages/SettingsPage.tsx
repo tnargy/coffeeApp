@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { ErrorBanner, Field, SuccessBanner } from '../components/Field.tsx'
 import { downloadBackup, parseBackup } from '../backup.ts'
 import { importBackup, saveSettings } from '../data/repository.ts'
+import { currentStandardPrice } from '../domain/pricing.ts'
 import { resolvedTheme } from '../domain/rules.ts'
 import { useAppState } from '../hooks/useAppState.ts'
 import type { Theme } from '../types.ts'
@@ -14,11 +15,13 @@ export function SettingsPage() {
   const state = useAppState()
   const [reserveDraft, setReserveDraft] = useState<string | null>(null)
   const [bagDraft, setBagDraft] = useState<string | null>(null)
+  const [priceDraft, setPriceDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
   const reserveLb = reserveDraft ?? (state ? String(Math.round((state.settings.personalUseReserveTargetGrams / GRAMS_PER_LB) * 100) / 100) : '')
   const bagSize = bagDraft ?? (state ? String(state.settings.defaultBagSizeOz) : '')
+  const standardPrice = priceDraft ?? (state ? String(currentStandardPrice(state.settings)) : '')
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -27,12 +30,14 @@ export function SettingsPage() {
     const result = await saveSettings({
       personalUseReserveTargetGrams: toGrams(Number(reserveLb), 'lb'),
       defaultBagSizeOz: Number(bagSize),
+      standardBagPrice: Number(standardPrice),
     })
     if (!result.ok) {
       setError(result.error.message)
       return
     }
-    setSuccess('Settings saved. Later bagging operations will default to this bag size.')
+    setPriceDraft(null)
+    setSuccess('Settings saved. Later sales use this standard price, and later bagging uses this bag size.')
   }
 
   async function onTheme(theme: Theme) {
@@ -91,7 +96,7 @@ export function SettingsPage() {
     <form className="stack form" onSubmit={onSubmit}>
       <div className="page-head">
         <h1>Settings</h1>
-        <p>Personal-use reserve defaults to about 1 lb per month. Default bag size starts at 8 oz.</p>
+        <p>Personal-use reserve defaults to about 1 lb per month. Default bag size starts at 8 oz. Standard bag price starts at $12.</p>
       </div>
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
@@ -107,6 +112,9 @@ export function SettingsPage() {
         </Field>
         <Field label="Default bag size (oz)">
           <input value={bagSize} onChange={(event) => setBagDraft(event.target.value)} inputMode="decimal" required />
+        </Field>
+        <Field label="Standard bag price ($)" hint="Future sales, break-even, and forward margin use this. Past sales keep the price stored when they were recorded.">
+          <input value={standardPrice} onChange={(event) => setPriceDraft(event.target.value)} inputMode="decimal" required />
         </Field>
       </div>
       <div className="form-actions">

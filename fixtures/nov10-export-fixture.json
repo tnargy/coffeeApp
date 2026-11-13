@@ -1,0 +1,780 @@
+{
+  "formatVersion": 2,
+  "exportedAt": "2026-11-10T12:00:00.000Z",
+  "note": "Sanitised stand-in for the 2026-11-10 export. Bag sources are present so per-lot cost reproduces. standardPriceAtSale is omitted and means $12. syntheticCases cover edges the export does not.",
+  "lots": [
+    {
+      "id": 1,
+      "name": "Guatemala",
+      "origin": "Guatemala",
+      "process": "washed",
+      "weightReceived": 2267.962,
+      "weightRemaining": 0,
+      "costPerKg": 17.35,
+      "totalCost": 39.35,
+      "dateReceived": "2026-10-05T15:00:00.000Z",
+      "personalReserveGrams": 453.592
+    },
+    {
+      "id": 2,
+      "name": "PNG",
+      "origin": "Papua New Guinea",
+      "process": "washed",
+      "weightReceived": 2267.962,
+      "weightRemaining": 867.962,
+      "costPerKg": 17.64,
+      "totalCost": 40,
+      "dateReceived": "2026-10-18T15:00:00.000Z",
+      "personalReserveGrams": 453.592
+    },
+    {
+      "id": 3,
+      "name": "Kenya",
+      "origin": "Kenya",
+      "process": "washed",
+      "weightReceived": 2267.962,
+      "weightRemaining": 67.962,
+      "costPerKg": 17.54,
+      "totalCost": 39.78,
+      "dateReceived": "2026-10-26T15:00:00.000Z",
+      "personalReserveGrams": 453.592
+    },
+    {
+      "id": 4,
+      "name": "Guatemala Huehue",
+      "origin": "Guatemala",
+      "process": "washed",
+      "weightReceived": 2267.962,
+      "weightRemaining": 2267.962,
+      "costPerKg": 22.05,
+      "totalCost": 50,
+      "dateReceived": "2026-11-09T16:00:00.000Z",
+      "personalReserveGrams": 453.592,
+      "notes": "New 5 lb lot"
+    },
+    {
+      "id": 5,
+      "name": "Colombia",
+      "origin": "Colombia",
+      "process": "washed",
+      "weightReceived": 2267.962,
+      "weightRemaining": 2267.962,
+      "costPerKg": 22.05,
+      "totalCost": 50,
+      "dateReceived": "2026-11-09T18:00:00.000Z",
+      "personalReserveGrams": 0
+    }
+  ],
+  "profiles": [
+    {
+      "id": 1,
+      "name": "House",
+      "beansName": "House",
+      "chargeTemp": 390,
+      "batchSize": 1500,
+      "dtr": 20,
+      "weightLossPercent": 13.7,
+      "notes": "Sanitised export profile"
+    }
+  ],
+  "batches": [
+    {
+      "id": 1,
+      "greenLotId": 1,
+      "profileId": 1,
+      "greenWeightCharged": 2267.962,
+      "roastedYield": 1967.428,
+      "weightLossPercent": 13.25,
+      "classification": "for-sale",
+      "roastDate": "2026-10-12T15:00:00.000Z",
+      "roastedWeightRemaining": 506.481,
+      "personalYield": 506.481,
+      "forSaleYield": 1460.947,
+      "personalRemaining": 506.481,
+      "forSaleRemaining": 0,
+      "status": "ready-to-bag"
+    },
+    {
+      "id": 2,
+      "greenLotId": 2,
+      "profileId": 1,
+      "greenWeightCharged": 1400,
+      "roastedYield": 1215.578,
+      "weightLossPercent": 13.17,
+      "classification": "for-sale",
+      "roastDate": "2026-10-28T15:00:00.000Z",
+      "roastedWeightRemaining": 11.36,
+      "personalYield": 0,
+      "forSaleYield": 1215.578,
+      "personalRemaining": 0,
+      "forSaleRemaining": 11.36,
+      "status": "ready-to-bag"
+    },
+    {
+      "id": 3,
+      "greenLotId": 3,
+      "profileId": 1,
+      "greenWeightCharged": 1400,
+      "roastedYield": 1192.279,
+      "weightLossPercent": 14.84,
+      "classification": "for-sale",
+      "roastDate": "2026-11-02T15:00:00.000Z",
+      "roastedWeightRemaining": 284.279,
+      "personalYield": 0,
+      "forSaleYield": 1192.279,
+      "personalRemaining": 0,
+      "forSaleRemaining": 284.279,
+      "status": "ready-to-bag"
+    },
+    {
+      "id": 4,
+      "greenLotId": 3,
+      "profileId": 1,
+      "greenWeightCharged": 800,
+      "roastedYield": 688.355,
+      "weightLossPercent": 13.96,
+      "classification": "for-sale",
+      "roastDate": "2026-11-03T15:00:00.000Z",
+      "roastedWeightRemaining": 688.355,
+      "personalYield": 0,
+      "forSaleYield": 688.355,
+      "personalRemaining": 0,
+      "forSaleRemaining": 688.355,
+      "status": "ready-to-bag"
+    }
+  ],
+  "bags": [
+    {
+      "id": 1,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "batchId": 1,
+      "sources": [
+        {
+          "batchId": 1,
+          "weight": 98.947
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 98.947,
+      "classification": "internal",
+      "status": "available",
+      "createdAt": "2026-10-19T16:00:00.000Z"
+    },
+    {
+      "id": 10,
+      "batchId": 2,
+      "sources": [
+        {
+          "batchId": 2,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-04T15:00:00.000Z"
+    },
+    {
+      "id": 11,
+      "batchId": 2,
+      "sources": [
+        {
+          "batchId": 2,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-04T15:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "batchId": 2,
+      "sources": [
+        {
+          "batchId": 2,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-04T15:00:00.000Z"
+    },
+    {
+      "id": 13,
+      "batchId": 2,
+      "sources": [
+        {
+          "batchId": 2,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-04T15:00:00.000Z"
+    },
+    {
+      "id": 20,
+      "batchId": 2,
+      "sources": [
+        {
+          "batchId": 2,
+          "weight": 296.218
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 296.218,
+      "classification": "internal",
+      "status": "available",
+      "createdAt": "2026-11-04T16:00:00.000Z"
+    },
+    {
+      "id": 30,
+      "batchId": 3,
+      "sources": [
+        {
+          "batchId": 3,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-08T15:00:00.000Z"
+    },
+    {
+      "id": 31,
+      "batchId": 3,
+      "sources": [
+        {
+          "batchId": 3,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-08T15:00:00.000Z"
+    },
+    {
+      "id": 32,
+      "batchId": 3,
+      "sources": [
+        {
+          "batchId": 3,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-08T15:00:00.000Z"
+    },
+    {
+      "id": 33,
+      "batchId": 3,
+      "sources": [
+        {
+          "batchId": 3,
+          "weight": 227
+        }
+      ],
+      "bagSizeOz": 8,
+      "weight": 227,
+      "classification": "for-sale",
+      "status": "sold",
+      "createdAt": "2026-11-08T15:00:00.000Z"
+    }
+  ],
+  "sales": [
+    {
+      "id": 1,
+      "baggedUnitIds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "saleAmount": 72,
+      "date": "2026-10-20T15:00:00.000Z",
+      "paid": true,
+      "notes": "October"
+    },
+    {
+      "id": 2,
+      "baggedUnitIds": [
+        10,
+        11,
+        12,
+        13
+      ],
+      "saleAmount": 66,
+      "date": "2026-11-05T15:00:00.000Z",
+      "paid": true,
+      "notes": "PNG"
+    },
+    {
+      "id": 3,
+      "baggedUnitIds": [
+        30,
+        31,
+        32,
+        33
+      ],
+      "saleAmount": 48,
+      "date": "2026-11-09T15:00:00.000Z",
+      "paid": true
+    }
+  ],
+  "audit": [],
+  "settings": {
+    "id": 1,
+    "personalUseReserveTargetGrams": 453.59237,
+    "defaultBagSizeOz": 8,
+    "theme": "light"
+  },
+  "syntheticCases": {
+    "voidedSale": {
+      "lots": [
+        {
+          "id": 1,
+          "name": "Voided lot",
+          "origin": "Voided lot",
+          "weightReceived": 1000,
+          "weightRemaining": 0,
+          "costPerKg": 20,
+          "totalCost": 20,
+          "dateReceived": "2026-01-01T00:00:00.000Z",
+          "personalReserveGrams": 0
+        }
+      ],
+      "profiles": [],
+      "batches": [
+        {
+          "id": 1,
+          "greenLotId": 1,
+          "profileId": 1,
+          "greenWeightCharged": 500,
+          "roastedYield": 430,
+          "weightLossPercent": 14,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 0,
+          "personalYield": 0,
+          "forSaleYield": 430,
+          "personalRemaining": 0,
+          "forSaleRemaining": 0,
+          "status": "bagged"
+        }
+      ],
+      "bags": [
+        {
+          "id": 1,
+          "batchId": 1,
+          "sources": [
+            {
+              "batchId": 1,
+              "weight": 227
+            }
+          ],
+          "bagSizeOz": 8,
+          "weight": 227,
+          "classification": "for-sale",
+          "status": "available",
+          "createdAt": "2026-02-02T00:00:00.000Z"
+        }
+      ],
+      "sales": [
+        {
+          "id": 1,
+          "baggedUnitIds": [
+            1
+          ],
+          "saleAmount": 12,
+          "date": "2026-02-03T00:00:00.000Z",
+          "voidedAt": "2026-02-04T00:00:00.000Z",
+          "voidReason": "Booked twice"
+        }
+      ],
+      "audit": [],
+      "settings": {
+        "id": 1,
+        "personalUseReserveTargetGrams": 0,
+        "defaultBagSizeOz": 8,
+        "theme": "light"
+      }
+    },
+    "belowStandardSale": {
+      "lots": [
+        {
+          "id": 1,
+          "name": "Discount lot",
+          "origin": "Discount lot",
+          "weightReceived": 1000,
+          "weightRemaining": 0,
+          "costPerKg": 10,
+          "totalCost": 10,
+          "dateReceived": "2026-01-01T00:00:00.000Z",
+          "personalReserveGrams": 0
+        }
+      ],
+      "profiles": [],
+      "batches": [
+        {
+          "id": 1,
+          "greenLotId": 1,
+          "profileId": 1,
+          "greenWeightCharged": 500,
+          "roastedYield": 450,
+          "weightLossPercent": 10,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 0,
+          "personalYield": 0,
+          "forSaleYield": 450,
+          "personalRemaining": 0,
+          "forSaleRemaining": 0,
+          "status": "bagged"
+        }
+      ],
+      "bags": [
+        {
+          "id": 1,
+          "batchId": 1,
+          "sources": [
+            {
+              "batchId": 1,
+              "weight": 227
+            }
+          ],
+          "bagSizeOz": 8,
+          "weight": 227,
+          "classification": "for-sale",
+          "status": "sold",
+          "createdAt": "2026-03-01T00:00:00.000Z"
+        }
+      ],
+      "sales": [
+        {
+          "id": 1,
+          "baggedUnitIds": [
+            1
+          ],
+          "saleAmount": 10,
+          "date": "2026-03-02T00:00:00.000Z",
+          "paid": true
+        }
+      ],
+      "audit": [],
+      "settings": {
+        "id": 1,
+        "personalUseReserveTargetGrams": 0,
+        "defaultBagSizeOz": 8,
+        "theme": "light"
+      }
+    },
+    "availableForSaleBag": {
+      "lots": [
+        {
+          "id": 1,
+          "name": "Ready lot",
+          "origin": "Ready lot",
+          "weightReceived": 1000,
+          "weightRemaining": 0,
+          "costPerKg": 15,
+          "totalCost": 15,
+          "dateReceived": "2026-01-01T00:00:00.000Z",
+          "personalReserveGrams": 0
+        }
+      ],
+      "profiles": [],
+      "batches": [
+        {
+          "id": 1,
+          "greenLotId": 1,
+          "profileId": 1,
+          "greenWeightCharged": 500,
+          "roastedYield": 454,
+          "weightLossPercent": 9.2,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 0,
+          "personalYield": 0,
+          "forSaleYield": 454,
+          "personalRemaining": 0,
+          "forSaleRemaining": 0,
+          "status": "bagged"
+        }
+      ],
+      "bags": [
+        {
+          "id": 1,
+          "batchId": 1,
+          "sources": [
+            {
+              "batchId": 1,
+              "weight": 227
+            }
+          ],
+          "bagSizeOz": 8,
+          "weight": 227,
+          "classification": "for-sale",
+          "status": "available",
+          "createdAt": "2026-04-01T00:00:00.000Z"
+        }
+      ],
+      "sales": [],
+      "audit": [],
+      "settings": {
+        "id": 1,
+        "personalUseReserveTargetGrams": 0,
+        "defaultBagSizeOz": 8,
+        "theme": "light"
+      }
+    },
+    "unpackedPersonalRemaining": {
+      "lots": [
+        {
+          "id": 1,
+          "name": "Personal lot",
+          "origin": "Personal lot",
+          "weightReceived": 600,
+          "weightRemaining": 0,
+          "costPerKg": 20,
+          "totalCost": 12,
+          "dateReceived": "2026-01-01T00:00:00.000Z",
+          "personalReserveGrams": 0
+        }
+      ],
+      "profiles": [],
+      "batches": [
+        {
+          "id": 1,
+          "greenLotId": 1,
+          "profileId": 1,
+          "greenWeightCharged": 600,
+          "roastedYield": 500,
+          "weightLossPercent": 16.67,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 200,
+          "personalYield": 80,
+          "forSaleYield": 420,
+          "personalRemaining": 200,
+          "forSaleRemaining": 0,
+          "status": "ready-to-bag"
+        }
+      ],
+      "bags": [],
+      "sales": [],
+      "audit": [],
+      "settings": {
+        "id": 1,
+        "personalUseReserveTargetGrams": 0,
+        "defaultBagSizeOz": 8,
+        "theme": "light"
+      }
+    },
+    "crossLotCombinedBag": {
+      "lots": [
+        {
+          "id": 1,
+          "name": "Left",
+          "origin": "Left",
+          "weightReceived": 1000,
+          "weightRemaining": 0,
+          "costPerKg": 10,
+          "totalCost": 10,
+          "dateReceived": "2026-01-01T00:00:00.000Z",
+          "personalReserveGrams": 0
+        },
+        {
+          "id": 2,
+          "name": "Right",
+          "origin": "Right",
+          "weightReceived": 1000,
+          "weightRemaining": 0,
+          "costPerKg": 30,
+          "totalCost": 30,
+          "dateReceived": "2026-01-02T00:00:00.000Z",
+          "personalReserveGrams": 0
+        }
+      ],
+      "profiles": [],
+      "batches": [
+        {
+          "id": 1,
+          "greenLotId": 1,
+          "profileId": 1,
+          "greenWeightCharged": 400,
+          "roastedYield": 360,
+          "weightLossPercent": 10,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 0,
+          "personalYield": 0,
+          "forSaleYield": 360,
+          "personalRemaining": 0,
+          "forSaleRemaining": 0,
+          "status": "bagged"
+        },
+        {
+          "id": 2,
+          "greenLotId": 2,
+          "profileId": 1,
+          "greenWeightCharged": 400,
+          "roastedYield": 360,
+          "weightLossPercent": 10,
+          "classification": "for-sale",
+          "roastDate": "2026-02-01T00:00:00.000Z",
+          "roastedWeightRemaining": 0,
+          "personalYield": 0,
+          "forSaleYield": 360,
+          "personalRemaining": 0,
+          "forSaleRemaining": 0,
+          "status": "bagged"
+        }
+      ],
+      "bags": [
+        {
+          "id": 1,
+          "batchId": 1,
+          "sources": [
+            {
+              "batchId": 1,
+              "weight": 150
+            },
+            {
+              "batchId": 2,
+              "weight": 77
+            }
+          ],
+          "bagSizeOz": 8,
+          "weight": 227,
+          "classification": "for-sale",
+          "status": "sold",
+          "createdAt": "2026-05-01T00:00:00.000Z"
+        }
+      ],
+      "sales": [
+        {
+          "id": 1,
+          "baggedUnitIds": [
+            1
+          ],
+          "saleAmount": 15,
+          "date": "2026-05-02T00:00:00.000Z",
+          "paid": true
+        }
+      ],
+      "audit": [],
+      "settings": {
+        "id": 1,
+        "personalUseReserveTargetGrams": 0,
+        "defaultBagSizeOz": 8,
+        "theme": "light"
+      }
+    }
+  }
+}

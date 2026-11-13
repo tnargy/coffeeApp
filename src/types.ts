@@ -93,6 +93,12 @@ export interface Sale {
   paid?: boolean
   /** Set when the operator picks a customer, or by the one-time note link. Absent means unlinked. */
   customerId?: number
+  /**
+   * Standard bag price in effect when the sale was recorded.
+   * Absent on sales from before this field existed; that means $12.
+   * Later edits and settings changes do not rewrite it.
+   */
+  standardPriceAtSale?: number
   voidedAt?: string
   voidReason?: string
 }
@@ -135,6 +141,10 @@ export interface Settings {
    * A backup from before customers (format 2 and older) does not carry it, so import runs the link.
    */
   customersLinkedAt?: string
+   * Price used for future sales, break-even, and forward margin.
+   * Absent means $12. Past sales keep `standardPriceAtSale`.
+   */
+  standardBagPrice?: number
 }
 
 export interface AppState {

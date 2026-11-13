@@ -99,6 +99,58 @@ The system displays a basic profit-and-loss summary derived from recorded sales 
 - WHEN the operator views the dashboard
 - THEN revenue, cost of goods, and gross profit are shown
 
+### Requirement: Personal cost is separate from cost of goods
+The P&L section MUST show the green-equivalent cost of live personal roasted stock, which is unpacked personal weight plus live personal bags, using the same green-cost share as a sold bag. That amount MUST NOT be added to cost of goods. It is not the cost of the personal-yield split alone when personal bags were packed from for-sale coffee.
+
+#### Scenario: Personal stock is shown apart from sold beans
+- GIVEN sold bags and live personal roasted coffee
+- WHEN the operator views the P&L section
+- THEN cost of goods counts the sold bags
+- AND personal stock is shown separately
+- AND personal stock is not included in cost of goods
+
+### Requirement: Monthly sales history
+The P&L section MUST list live sales by UTC month of the sale date. Each month shows bags, actual revenue, standard revenue, overpay, and shortfall. A month with no live sales MUST NOT appear. Voided sales MUST NOT be included. The list is history, not a demand forecast.
+
+#### Scenario: Two months of sales
+- GIVEN live sales in October and November and none in the months between
+- WHEN the operator views the P&L section
+- THEN October and November are listed with their bags and revenue
+- AND the empty months are omitted
+
+### Requirement: Per-lot break-even
+The dashboard MUST list every lot, including lots with no green remaining. For each lot it shows total cost, revenue to date, standard revenue, bags sold to one decimal, break-even bags `ceil(totalCost / current standard price)`, bags still to break even `ceil(max(0, totalCost − standard revenue) / current standard price)`, profit left after the lot cost, personal-use cost (the green-equivalent cost of live personal roasted stock from that lot, shown separately and NOT added to cost of goods), and a status. Status is `no cost` when total cost is zero, `covered` when standard revenue is at least total cost, and `not covered` otherwise. A $0 lot shows no break-even line. Standard revenue uses the standard price stored on each sale. A missing stored price means $12. Standard revenue for a sale is the sum over its bags of (bag weight / packed bag weight for the default bag size) × that sale's standard price, so a 4 oz bag counts about half the standard price.
+
+#### Scenario: A lot sold past its cost
+- GIVEN a lot whose standard revenue is at least its total cost
+- WHEN the operator views lot margin
+- THEN the lot is listed as covered
+- AND bags still to break even is zero
+
+#### Scenario: A finished lot stays in the margin list
+- GIVEN a lot with no green remaining
+- WHEN the operator views the dashboard
+- THEN that lot is omitted from the green-inventory list
+- AND that lot is still listed in lot margin
+
+### Requirement: Forward margin and what-if
+Forward roasted weight for a lot is `max(0, remaining green − unmet reserve) × (1 − loss) + for-sale roasted remaining + available for-sale bag weight` from that lot. Loss is the lot's own green-weighted loss, `1 − roasted yield / green charged`, or the overall green-weighted loss when the lot has no roast. Bag count divides that weight by `round(default bag ounces × 28.349523125)`. Displayed bags use one decimal. Forward revenue and profit use the exact bag count. The section MUST offer a per-lot reserve what-if, showing what selling that reserve would add (extra bags, extra revenue, and extra profit left), and a what-if bag price above zero. The what-if price recomputes forward profit per bag and per lot only. It MUST NOT change stored sales, break-even, or standard revenue. A what-if price of zero or less, or non-numeric, is ignored and the section falls back to the current standard price.
+
+#### Scenario: Reserve what-if does not change stored sales
+- GIVEN a lot with a personal reserve and no roasts
+- WHEN the operator changes the reserve what-if and the what-if bag price
+- THEN forward bags and forward profit change
+- AND recorded sales and break-even stay as they were
+
+### Requirement: Cost trend
+Lots MUST be comparable by price per kilogram in receipt order. A lot is flagged when its price per kilogram is at least 10% higher than the most recent earlier paid lot received on an earlier UTC day. Ties use the latest receipt time, then the highest id. Lots received on the same UTC day share that comparator. A lot with no such comparator is not flagged. A lot with zero total cost is not a comparator and is not flagged.
+
+#### Scenario: Same-day receipts share a comparator
+- GIVEN two paid lots received on one UTC day and an earlier paid lot
+- WHEN the operator views lot margin
+- THEN both same-day lots are compared with the earlier lot
+- AND neither is compared with the other
+
 ### Requirement: Fair to sell
 When a lot's personal allotment is covered, the dashboard MUST mark that lot's remaining green and its for-sale roasted stock as fair to sell. For-sale roasted stock includes the for-sale pool of a split roast. Personal-use roasted stock MUST stay marked personal use and MUST NOT be marked fair to sell. If the allotment is not covered, the dashboard MUST show how much of that lot is still reserved and MUST NOT mark that reserved green as fair to sell.
 

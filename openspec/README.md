@@ -6,7 +6,7 @@ This folder contains an OpenSpec-style specification structure for the internal 
 
 `openspec/specs/` is the current behavior contract. `openspec/changes/archive/` is finished work. Operator and code flowcharts live in `docs/flows.md`, not here.
 
-Current capabilities: inventory, roasting, resting-and-packaging, sales, dashboard, corrections, backup, appearance, weight-display.
+Current capabilities: inventory, roasting, resting-and-packaging, sales, customers, dashboard, corrections, backup, appearance, weight-display.
 
 ## How to use
 

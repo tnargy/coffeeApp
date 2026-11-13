@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { AuditEntry, BaggedUnit, GreenLot, RoastBatch, RoastProfile, Sale, Settings } from './types.ts'
+import type { AuditEntry, BaggedUnit, Customer, GreenLot, RoastBatch, RoastProfile, Sale, Settings } from './types.ts'
 
 export const db = new Dexie('CoffeeRoasterDB') as Dexie & {
   lots: EntityTable<GreenLot, 'id'>
@@ -7,6 +7,7 @@ export const db = new Dexie('CoffeeRoasterDB') as Dexie & {
   batches: EntityTable<RoastBatch, 'id'>
   bags: EntityTable<BaggedUnit, 'id'>
   sales: EntityTable<Sale, 'id'>
+  customers: EntityTable<Customer, 'id'>
   audit: EntityTable<AuditEntry, 'id'>
   settings: EntityTable<Settings, 'id'>
 }
@@ -22,6 +23,10 @@ db.version(1).stores({
 
 db.version(2).stores({
   audit: '++id, at, entity, entityKey',
+})
+
+db.version(3).stores({
+  customers: '++id, name',
 })
 
 export async function resetDatabase(): Promise<void> {

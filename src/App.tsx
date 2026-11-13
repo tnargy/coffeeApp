@@ -8,6 +8,7 @@ import { LogRoast } from './pages/LogRoast.tsx'
 import { PackBags } from './pages/PackBags.tsx'
 import { Profiles } from './pages/Profiles.tsx'
 import { ReceiveLot } from './pages/ReceiveLot.tsx'
+import { Customers } from './pages/Customers.tsx'
 import { RecordSale } from './pages/RecordSale.tsx'
 import { Records } from './pages/Records.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/profiles" element={<Profiles />} />
         <Route path="/pack" element={<PackBags />} />
         <Route path="/sale" element={<RecordSale />} />
+        <Route path="/customers" element={<Customers />} />
         <Route path="/history" element={<History />} />
         <Route path="/records" element={<Records />} />
         <Route path="/settings" element={<SettingsPage />} />

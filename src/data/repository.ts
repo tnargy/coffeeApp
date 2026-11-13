@@ -1,5 +1,13 @@
 import { db } from '../db.ts'
-import { parseBackup, type BackupParseResult } from '../backup.ts'
+import { formatBackupImportSummary, parseBackup } from '../backup.ts'
+import {
+  addCustomer,
+  importCustomerList,
+  linkUnlinkedSales,
+  updateCustomer,
+  type CustomerInput,
+  type CustomerPatch,
+} from '../domain/customers.ts'
 import {
   addProfile,
   applyEntityUpdate,
@@ -39,12 +47,13 @@ function enqueue<T>(work: () => Promise<T>): Promise<T> {
 }
 
 export async function loadState(): Promise<AppState> {
-  const [lots, profiles, batches, bags, sales, audit, settings] = await Promise.all([
+  const [lots, profiles, batches, bags, sales, customers, audit, settings] = await Promise.all([
     db.lots.toArray(),
     db.profiles.toArray(),
     db.batches.toArray(),
     db.bags.toArray(),
     db.sales.toArray(),
+    db.customers.toArray(),
     db.audit.toArray(),
     db.settings.get(SETTINGS_ID),
   ])
@@ -54,27 +63,34 @@ export async function loadState(): Promise<AppState> {
     batches,
     bags,
     sales,
+    customers,
     audit,
     settings: settings ?? emptyState().settings,
   })
 }
 
 export async function saveState(state: AppState): Promise<void> {
-    await db.transaction('rw', [db.lots, db.profiles, db.batches, db.bags, db.sales, db.audit, db.settings], async () => {
-    await db.lots.clear()
-    await db.profiles.clear()
-    await db.batches.clear()
-    await db.bags.clear()
-    await db.sales.clear()
-    await db.audit.clear()
-    await db.lots.bulkAdd(state.lots)
-    await db.profiles.bulkAdd(state.profiles)
-    await db.batches.bulkAdd(state.batches)
-    await db.bags.bulkAdd(state.bags)
-    await db.sales.bulkAdd(state.sales)
-    await db.audit.bulkAdd(state.audit)
-    await db.settings.put(state.settings)
-  })
+  await db.transaction(
+    'rw',
+    [db.lots, db.profiles, db.batches, db.bags, db.sales, db.customers, db.audit, db.settings],
+    async () => {
+      await db.lots.clear()
+      await db.profiles.clear()
+      await db.batches.clear()
+      await db.bags.clear()
+      await db.sales.clear()
+      await db.customers.clear()
+      await db.audit.clear()
+      await db.lots.bulkAdd(state.lots)
+      await db.profiles.bulkAdd(state.profiles)
+      await db.batches.bulkAdd(state.batches)
+      await db.bags.bulkAdd(state.bags)
+      await db.sales.bulkAdd(state.sales)
+      await db.customers.bulkAdd(state.customers)
+      await db.audit.bulkAdd(state.audit)
+      await db.settings.put(state.settings)
+    },
+  )
 }
 
 async function commit(result: DomainResult): Promise<DomainResult> {
@@ -88,7 +104,7 @@ async function mutate(change: (state: AppState) => DomainResult): Promise<Domain
 }
 
 function isUntouchedStarter(state: AppState): boolean {
-  if (state.bags.length > 0 || state.sales.length > 0) return false
+  if (state.bags.length > 0 || state.sales.length > 0 || state.customers.length > 0) return false
   if (state.lots.length !== 1 || state.profiles.length !== 1 || state.batches.length !== 1) return false
   const lot = state.lots[0]
   const profile = state.profiles[0]
@@ -115,18 +131,30 @@ export async function ensureReady(): Promise<void> {
       })
       await saveState({ ...state, batches })
     }
-    const state = await loadState()
-    if (!isUntouchedStarter(state)) return
-    const kept = state.settings
-    await saveState({
-      ...emptyState(),
-      settings: {
-        ...emptyState().settings,
-        personalUseReserveTargetGrams: kept.personalUseReserveTargetGrams,
-        defaultBagSizeOz: kept.defaultBagSizeOz,
-        theme: kept.theme,
-      },
-    })
+    let state = await loadState()
+    if (isUntouchedStarter(state)) {
+      const kept = state.settings
+      state = {
+        ...emptyState(),
+        settings: {
+          ...emptyState().settings,
+          personalUseReserveTargetGrams: kept.personalUseReserveTargetGrams,
+          defaultBagSizeOz: kept.defaultBagSizeOz,
+          theme: kept.theme,
+        },
+      }
+      await saveState(state)
+    }
+    if (!state.settings.customersLinkedAt) {
+      const linked = linkUnlinkedSales(state)
+      await saveState({
+        ...linked.state,
+        settings: {
+          ...linked.state.settings,
+          customersLinkedAt: new Date().toISOString(),
+        },
+      })
+    }
   })
 }
 
@@ -158,11 +186,45 @@ export function voidRecord(target: RecordTarget, note: string): Promise<DomainRe
   return mutate((state) => voidRecordInState(state, target, note))
 }
 
-export async function importBackup(text: string): Promise<BackupParseResult> {
-  const parsed = parseBackup(text)
-  if (!parsed.ok) return parsed
-  await enqueue(() => saveState(parsed.state))
-  return parsed
+export type BackupImportResult =
+  | { ok: true; state: AppState; summary: string }
+  | { ok: false; error: string }
+
+export async function importBackup(text: string): Promise<BackupImportResult> {
+  return enqueue(async () => {
+    const parsed = parseBackup(text)
+    if (!parsed.ok) return parsed
+    let state = parsed.state
+    let linkedFromNotes = 0
+    if (!state.settings.customersLinkedAt) {
+      const linked = linkUnlinkedSales(state, { skipSaleIds: parsed.details.skipNoteLinkSaleIds })
+      linkedFromNotes = linked.linked
+      state = {
+        ...linked.state,
+        settings: { ...linked.state.settings, customersLinkedAt: new Date().toISOString() },
+      }
+    }
+    const summary = formatBackupImportSummary({
+      customerCount: state.customers.length,
+      skippedDuplicateNames: parsed.details.skippedDuplicateNames,
+      unlinkedSaleIds: parsed.details.unlinkedSaleIds,
+      linkedFromNotes,
+    })
+    await saveState(state)
+    return { ok: true, state, summary }
+  })
+}
+
+export function createCustomer(input: CustomerInput): Promise<DomainResult> {
+  return mutate((state) => addCustomer(state, input))
+}
+
+export function saveCustomer(id: number, patch: CustomerPatch): Promise<DomainResult> {
+  return mutate((state) => updateCustomer(state, id, patch))
+}
+
+export function importCustomerDirectory(text: string): Promise<DomainResult> {
+  return mutate((state) => importCustomerList(state, text))
 }
 
 export const crud = {

@@ -2,16 +2,19 @@ import type {
   AppState,
   AuditEntry,
   BaggedUnit,
+  Customer,
   GreenLot,
+  GrindPreference,
   RoastBatch,
   RoastProfile,
   Sale,
   Settings,
 } from './types.ts'
 import { SETTINGS_ID } from './units.ts'
+import { isGrindPreference, normalizePersonName } from './domain/customers.ts'
 import { batchPools } from './domain/rules.ts'
 
-export const BACKUP_FORMAT_VERSION = 2
+export const BACKUP_FORMAT_VERSION = 3
 
 export interface BackupDocument {
   formatVersion: number
@@ -21,8 +24,39 @@ export interface BackupDocument {
   batches: RoastBatch[]
   bags: BaggedUnit[]
   sales: Sale[]
+  customers: Customer[]
   audit: AuditEntry[]
   settings: Settings
+}
+
+export interface BackupImportDetails {
+  skippedDuplicateNames: string[]
+  unlinkedSaleIds: number[]
+  /** Sales that must stay unlinked when the note linker runs after this import. */
+  skipNoteLinkSaleIds: number[]
+}
+
+export function formatBackupImportSummary(input: {
+  customerCount: number
+  skippedDuplicateNames: string[]
+  unlinkedSaleIds: number[]
+  linkedFromNotes: number
+}): string {
+  const noun = input.customerCount === 1 ? 'customer' : 'customers'
+  const parts = [`${input.customerCount} ${noun} restored.`]
+  if (input.skippedDuplicateNames.length) {
+    parts.push(`Skipped duplicate names: ${input.skippedDuplicateNames.join(', ')}.`)
+  }
+  if (input.unlinkedSaleIds.length) {
+    const saleNoun = input.unlinkedSaleIds.length === 1 ? 'sale' : 'sales'
+    const ids = input.unlinkedSaleIds.map((id) => `#${id}`).join(', ')
+    parts.push(`Unlinked ${input.unlinkedSaleIds.length} ${saleNoun} whose customer was not in the backup: ${ids}.`)
+  }
+  if (input.linkedFromNotes > 0) {
+    const saleNoun = input.linkedFromNotes === 1 ? 'sale' : 'sales'
+    parts.push(`Linked ${input.linkedFromNotes} ${saleNoun} from sale notes.`)
+  }
+  return parts.join(' ')
 }
 
 export function buildBackup(state: AppState, exportedAt = new Date().toISOString()): BackupDocument {
@@ -37,6 +71,7 @@ export function buildBackup(state: AppState, exportedAt = new Date().toISOString
     }),
     bags: state.bags,
     sales: state.sales,
+    customers: state.customers,
     audit: state.audit,
     settings: state.settings,
   }
@@ -55,7 +90,7 @@ export function downloadBackup(state: AppState): void {
   URL.revokeObjectURL(url)
 }
 
-export type BackupParseResult = { ok: true; state: AppState } | { ok: false; error: string }
+export type BackupParseResult = { ok: true; state: AppState; details: BackupImportDetails } | { ok: false; error: string }
 
 export function parseBackup(text: string): BackupParseResult {
   let raw: unknown
@@ -167,18 +202,120 @@ export function parseBackup(text: string): BackupParseResult {
     }
   }
 
+  const formatVersion = typeof version === 'number' ? version : null
+  const exportedAt = typeof doc.exportedAt === 'string' ? doc.exportedAt : new Date().toISOString()
+  const readCustomers = parseCustomers(doc.customers, formatVersion === BACKUP_FORMAT_VERSION, exportedAt)
+  if (!readCustomers.ok) return readCustomers
+
+  const unlinkedSaleIds: number[] = []
+  const skipNoteLinkSaleIds: number[] = []
+  const restoredSales = sales.map((sale) => {
+    const customerId = sale.customerId
+    if (formatVersion !== BACKUP_FORMAT_VERSION) {
+      if (customerId == null) return sale
+      const { customerId: _dropped, ...rest } = sale
+      return rest
+    }
+    if (typeof customerId === 'number' && readCustomers.keptIds.has(customerId)) return sale
+    if (customerId == null) return sale
+    if (typeof sale.id === 'number') {
+      unlinkedSaleIds.push(sale.id)
+      skipNoteLinkSaleIds.push(sale.id)
+    }
+    const { customerId: _dropped, ...rest } = sale
+    return rest
+  })
+
+  const settings = { ...(doc.settings as Settings), id: SETTINGS_ID }
+  if (formatVersion !== BACKUP_FORMAT_VERSION) delete settings.customersLinkedAt
+
   return {
     ok: true,
+    details: {
+      skippedDuplicateNames: readCustomers.skippedDuplicateNames,
+      unlinkedSaleIds,
+      skipNoteLinkSaleIds,
+    },
     state: {
       lots,
       profiles,
       batches,
       bags,
-      sales,
+      sales: restoredSales,
+      customers: readCustomers.customers,
       audit,
-      settings: { ...(doc.settings as Settings), id: SETTINGS_ID },
+      settings,
     },
   }
+}
+
+function parseCustomers(
+  raw: unknown,
+  requireCollection: boolean,
+  exportedAt: string,
+): { ok: true; customers: Customer[]; skippedDuplicateNames: string[]; keptIds: Set<number> } | { ok: false; error: string } {
+  if (!requireCollection) {
+    return { ok: true, customers: [], skippedDuplicateNames: [], keptIds: new Set() }
+  }
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: 'That backup is missing the customers collection.' }
+  }
+
+  const skippedDuplicateNames: string[] = []
+  const seenNames = new Set<string>()
+  const pending: { name: string; grind: GrindPreference; notes?: string; createdAt: string; explicitId: number | null }[] = []
+  for (const entry of raw) {
+    if (!isRecord(entry) || typeof entry.name !== 'string' || !isGrindPreference(entry.grindPreference)) {
+      return { ok: false, error: 'That backup has an invalid customers collection.' }
+    }
+    const name = normalizePersonName(entry.name)
+    if (!name) return { ok: false, error: 'That backup has an invalid customers collection.' }
+    const key = name.toLowerCase()
+    if (seenNames.has(key)) {
+      skippedDuplicateNames.push(name)
+      continue
+    }
+    seenNames.add(key)
+    const notes = typeof entry.notes === 'string' ? entry.notes.trim() : ''
+    pending.push({
+      name,
+      grind: entry.grindPreference,
+      notes: notes || undefined,
+      createdAt: customerCreatedAt(entry.createdAt, exportedAt),
+      explicitId: typeof entry.id === 'number' && Number.isInteger(entry.id) && entry.id > 0 ? entry.id : null,
+    })
+  }
+
+  const reserved = new Set<number>()
+  for (const entry of pending) {
+    if (entry.explicitId != null && !reserved.has(entry.explicitId)) reserved.add(entry.explicitId)
+  }
+  const keptIds = new Set<number>()
+  const customers: Customer[] = []
+  for (const entry of pending) {
+    let id = entry.explicitId
+    if (id == null || keptIds.has(id)) {
+      id = 1
+      while (reserved.has(id) || keptIds.has(id)) id += 1
+      reserved.add(id)
+    }
+    keptIds.add(id)
+    const customer: Customer = {
+      id,
+      name: entry.name,
+      grindPreference: entry.grind,
+      createdAt: entry.createdAt,
+    }
+    if (entry.notes) customer.notes = entry.notes
+    customers.push(customer)
+  }
+  return { ok: true, customers, skippedDuplicateNames, keptIds }
+}
+
+function customerCreatedAt(value: unknown, fallback: string): string {
+  if (typeof value === 'string' && value.trim() && !Number.isNaN(Date.parse(value))) return new Date(value).toISOString()
+  if (fallback.trim() && !Number.isNaN(Date.parse(fallback))) return new Date(fallback).toISOString()
+  return new Date().toISOString()
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

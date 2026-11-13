@@ -96,6 +96,27 @@ On the records page sales section, each listed sale MUST show whether it is paid
 - **AND** its notes are listed
 - **AND** it is marked void with its reason
 
+### Requirement: A sale can be linked to a customer
+Record Sale MUST offer a customer picker. Each existing customer's option label MUST include that customer's grind. After a customer is picked, the form MUST show that customer's grind and bags bought. The operator MUST be allowed to record a sale with no customer, and that sale MUST stay unlinked. Choosing a new name that already exists, case-insensitively, MUST reuse that customer and MUST NOT change the stored grind. The records sales list MUST show the linked customer's name. A sale with no customer MUST NOT show an empty customer name.
+
+#### Scenario: Pick a customer
+- **GIVEN** a customer with a grind preference and at least one bag bought
+- **WHEN** the operator picks that customer on Record Sale
+- **THEN** the form shows the grind and the bags bought
+- **AND** the recorded sale is linked to that customer
+- **AND** Records shows the customer's name
+
+#### Scenario: No customer
+- **GIVEN** bags available to sell
+- **WHEN** the operator records a sale with no customer
+- **THEN** the sale is stored with no customer link
+
+#### Scenario: New name matches an existing customer
+- **GIVEN** a customer already in the directory
+- **WHEN** the operator types that name as a new customer, in a different case
+- **THEN** the sale uses the existing customer
+- **AND** no second customer is created
+
 ### Requirement: Standard price stored at sale time
 Settings MUST include an optional standard bag price. When it is missing, the price is $12. The settings page MUST let the operator change it, and the price MUST be greater than zero. `updateSettings` MUST accept that field. Recording a sale MUST store `standardPriceAtSale` from the current standard price. Later edits MUST NOT change that stored price. A sale with no stored price uses $12. Changing the setting affects later sales, break-even, and forward margin only. Past standard revenue, overpay, shortfall, and monthly history MUST NOT be recomputed. After a price change, bags sold plus bags still to break even need not equal break-even bags.
 

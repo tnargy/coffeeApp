@@ -86,6 +86,7 @@ describe('backup', () => {
     expect(backup.batches).toHaveLength(1)
     expect(backup.bags).toHaveLength(1)
     expect(backup.sales).toHaveLength(1)
+    expect(backup.customers).toEqual([])
     expect(backup.settings).toBe(state.settings)
   })
 
@@ -180,7 +181,7 @@ describe('backup', () => {
       { batchId: 1, weight: 100 },
       { batchId: 2, weight: 100 },
     ])
-    expect(buildBackup(imported.state).formatVersion).toBe(2)
+    expect(buildBackup(imported.state).formatVersion).toBe(3)
   })
 
   it('rejects bag sources that point at a missing roast, do not add up, or are negative', () => {
@@ -227,5 +228,84 @@ describe('backup', () => {
     expect(badWeight.ok).toBe(false)
     if (badWeight.ok) return
     expect(badWeight.error).toMatch(/negative/i)
+  })
+
+  it('rejects a version 3 backup with a missing or invalid customers collection', () => {
+    const missing = buildBackup(sampleState()) as unknown as Record<string, unknown>
+    delete missing.customers
+    const missingResult = parseBackup(JSON.stringify(missing))
+    expect(missingResult.ok).toBe(false)
+    if (missingResult.ok) return
+    expect(missingResult.error).toBe('That backup is missing the customers collection.')
+
+    const blankName = buildBackup(sampleState()) as unknown as { customers: unknown[] }
+    blankName.customers = [{ id: 1, name: '   ', grindPreference: 'ground', createdAt: '2026-01-01T00:00:00.000Z' }]
+    const blankResult = parseBackup(JSON.stringify(blankName))
+    expect(blankResult.ok).toBe(false)
+    if (blankResult.ok) return
+    expect(blankResult.error).toBe('That backup has an invalid customers collection.')
+
+    const badGrind = buildBackup(sampleState()) as unknown as { customers: unknown[] }
+    badGrind.customers = [{ id: 1, name: 'Sam', grindPreference: 'beans', createdAt: '2026-01-01T00:00:00.000Z' }]
+    const grindResult = parseBackup(JSON.stringify(badGrind))
+    expect(grindResult.ok).toBe(false)
+    if (grindResult.ok) return
+    expect(grindResult.error).toBe('That backup has an invalid customers collection.')
+  })
+
+  it('keeps the first duplicate customer, drops a sale whose customer is missing, and round-trips version 3', () => {
+    const state = sampleState()
+    state.customers = [
+      { id: 1, name: 'Sam', grindPreference: 'ground', createdAt: '2026-01-01T00:00:00.000Z', notes: 'pays later' },
+    ]
+    state.settings = { ...state.settings, customersLinkedAt: '2026-01-02T00:00:00.000Z' }
+    state.sales[0] = { ...state.sales[0], customerId: 1, notes: 'Sam Whole' }
+    const roundTrip = parseBackup(JSON.stringify(buildBackup(state, '2026-01-04T00:00:00.000Z')))
+    expect(roundTrip.ok).toBe(true)
+    if (!roundTrip.ok) return
+    expect(roundTrip.state.customers[0]).toMatchObject({
+      id: 1,
+      name: 'Sam',
+      grindPreference: 'ground',
+      notes: 'pays later',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(roundTrip.state.sales[0].customerId).toBe(1)
+    expect(roundTrip.state.sales[0].notes).toBe('Sam Whole')
+    expect(roundTrip.state.settings.customersLinkedAt).toBe('2026-01-02T00:00:00.000Z')
+
+    const duplicate = buildBackup(state) as unknown as {
+      customers: unknown[]
+      sales: { id: number; customerId?: number; notes?: string; baggedUnitIds: number[]; saleAmount: number; date: string }[]
+      settings: { customersLinkedAt?: string }
+    }
+    duplicate.customers = [
+      { id: 1, name: 'Sam', grindPreference: 'ground', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 2, name: ' sam ', grindPreference: 'whole', createdAt: '2026-01-02T00:00:00.000Z' },
+    ]
+    duplicate.sales[0] = { ...duplicate.sales[0], id: 7, customerId: 2, notes: 'sam whole' }
+    delete duplicate.settings.customersLinkedAt
+    const parsed = parseBackup(JSON.stringify(duplicate))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.state.customers).toHaveLength(1)
+    expect(parsed.state.customers[0]).toMatchObject({ id: 1, name: 'Sam', grindPreference: 'ground' })
+    expect(parsed.state.sales[0].customerId).toBeUndefined()
+    expect(parsed.state.sales[0].notes).toBe('sam whole')
+    expect(parsed.details.skippedDuplicateNames).toEqual(['sam'])
+    expect(parsed.details.unlinkedSaleIds).toEqual([7])
+    expect(parsed.details.skipNoteLinkSaleIds).toEqual([7])
+  })
+
+  it('imports a version 2 backup with an empty customer list', () => {
+    const legacy = buildBackup(sampleState()) as unknown as Record<string, unknown>
+    legacy.formatVersion = 2
+    delete legacy.customers
+    const result = parseBackup(JSON.stringify(legacy))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.customers).toEqual([])
+    expect(result.state.settings.customersLinkedAt).toBeUndefined()
+    expect(result.state.sales).toHaveLength(1)
   })
 })

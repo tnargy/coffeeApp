@@ -6,6 +6,7 @@ import type {
   BaggedUnit,
   BatchStatus,
   Classification,
+  GrindPreference,
   GreenLot,
   ProfileSnapshot,
   RoastBatch,
@@ -14,6 +15,7 @@ import type {
   Settings,
   Theme,
 } from '../types.ts'
+import { resolveSaleCustomer } from './customers.ts'
 import { DEFAULT_STANDARD_BAG_PRICE, currentStandardPrice } from './pricing.ts'
 import {
   DEFAULT_BAG_SIZE_OZ,
@@ -104,6 +106,10 @@ export interface RecordSaleInput {
   date: string
   notes?: string
   paid?: boolean
+  customerId?: number
+  newCustomer?: { name: string; grindPreference: GrindPreference }
+  /** Timestamp used only when this sale creates a customer. */
+  now?: string
 }
 
 export type EntityUpdate =
@@ -162,7 +168,7 @@ export function resolvedTheme(settings: Settings): Theme {
 }
 
 export function emptyState(settings: Settings = defaultSettings()): AppState {
-  return { lots: [], profiles: [], batches: [], bags: [], sales: [], audit: [], settings }
+  return { lots: [], profiles: [], batches: [], bags: [], sales: [], customers: [], audit: [], settings }
 }
 
 export function greenRemaining(state: AppState): number {
@@ -532,7 +538,9 @@ export function recordSale(state: AppState, input: RecordSaleInput): DomainResul
     return fail(state, 'Tax amount, if recorded, cannot be negative. Tax is not calculated.')
   }
   if (!isValidDate(input.date)) return fail(state, 'Sale date is required.')
-  const next = structuredClone(state)
+  const resolved = resolveSaleCustomer(state, input)
+  if (!resolved.ok) return fail(state, resolved.message)
+  const next = resolved.state
   const sold = new Set(uniqueIds)
   next.bags = next.bags.map((bag) => (sold.has(bag.id) ? { ...bag, status: 'sold' } : bag))
   const sale: Sale = {
@@ -545,6 +553,7 @@ export function recordSale(state: AppState, input: RecordSaleInput): DomainResul
     standardPriceAtSale: roundMoney(currentStandardPrice(state.settings)),
   }
   if (input.taxAmount != null) sale.taxAmount = roundMoney(input.taxAmount)
+  if (resolved.customerId != null) sale.customerId = resolved.customerId
   next.sales.push(sale)
   return { ok: true, state: next }
 }
